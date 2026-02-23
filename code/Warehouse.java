@@ -14,6 +14,10 @@ public class Warehouse {
     return inventory;
   }
 
+  public ConcurrentHashMap<String, Integer> getStagingArea() {
+    return stagingArea;
+  }
+
   public void addItem(String item, int quantity) {
     inventory.put(item, quantity);
   }
@@ -34,14 +38,6 @@ public class Warehouse {
     for (String item : stagingArea.keySet()) {
       System.out.println(item + ": " + stagingArea.get(item));
     }
-  }
-
-  public void printEvent(String tick, String thread_id, String event, ConcurrentHashMap<String, Integer> items) {
-    StringBuilder itemsString = new StringBuilder();
-    for (String item : items.keySet()) {
-      itemsString.append(item).append("=").append(items.get(item)).append(" ");
-    }
-    System.out.println("tick=" + tick + " tid=" + thread_id + " event=" + event + " " + itemsString.toString().trim());
   }
 
 }
