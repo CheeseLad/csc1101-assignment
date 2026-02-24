@@ -1,43 +1,22 @@
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.ArrayList;
 
 public class Warehouse {
 
-  private ConcurrentHashMap<String, Integer> inventory;
-  private ConcurrentHashMap<String, Integer> stagingArea;
+  private ArrayList<Box> stagingArea;
+  private ArrayList<Box> inventory;
 
   public Warehouse() {
-    inventory = new ConcurrentHashMap<>();
-    stagingArea = new ConcurrentHashMap<>();
+    inventory = new ArrayList<>();
+    stagingArea = new ArrayList<>();
   }
 
-  public ConcurrentHashMap<String, Integer> getInventory() {
-    return inventory;
-  }
-
-  public ConcurrentHashMap<String, Integer> getStagingArea() {
+  public ArrayList<Box> getStagingArea() {
     return stagingArea;
   }
 
-  public void addItem(String item, int quantity) {
-    inventory.put(item, quantity);
-  }
-
-  public void addDeliveryToStagingArea(ConcurrentHashMap<String, Integer> deliveryItems) {
-    for (String item : deliveryItems.keySet()) {
-      stagingArea.put(item, stagingArea.getOrDefault(item, 0) + deliveryItems.get(item));
+  public void addDeliveryToStagingArea(ArrayList<Box> delivery) {
+    synchronized (this) {
+      stagingArea.addAll(delivery);
     }
   }
-
-  public void printInventory() {
-    for (String item : inventory.keySet()) {
-      System.out.println(item + ": " + inventory.get(item));
-    }
-  }
-
-  public void printStagingArea() {
-    for (String item : stagingArea.keySet()) {
-      System.out.println(item + ": " + stagingArea.get(item));
-    }
-  }
-
 }
