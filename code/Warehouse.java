@@ -19,4 +19,13 @@ public class Warehouse {
       stagingArea.addAll(delivery);
     }
   }
+
+  public Box removeBoxFromStagingArea() {
+    synchronized (this) {
+      if (!this.stagingArea.isEmpty()) {
+        return stagingArea.remove(0);
+      }
+      return null;
+    }
+  }
 }
