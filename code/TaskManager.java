@@ -5,31 +5,36 @@ class TaskManager implements Runnable {
   private int sleepTime;
   private String threadName;
   private static Random generator = new Random();
+  private int daily_limit = 10;
+  private ArrayList<Section> sections;
+  private Random randgen;
 
-  public TaskManager(String name) {
+  public TaskManager(String name, int daily_limit, ArrayList<Section> sections, Random randgen) {
     threadName = name;
-    sleepTime = generator.nextInt(1000);
+    sleepTime = generator.nextInt(50) + 50; // Random sleep time between 50 and 100 ms
+    this.daily_limit = daily_limit;
+    this.sections = sections;
+    this.randgen = randgen;
+    
   }
 
   public void run() {
     try {
       System.out.printf("Thread %s running\n", threadName);
-      // TODO: Implement tick behaviour
-
-      String[] categories = {"electronics", "books", "medicines", "clothes", "tools"};
-
       Util util = new Util();
-      Delivery delivery = new Delivery(categories);
-      Warehouse warehouse = new Warehouse();
+      // TODO: Implement tick behaviour
+      Picker picker = new Picker();
 
-      for (String category : categories) {
-        System.out.println("Creating section for category: " + category);
-        Section section = new Section(category);
-        System.out.println(section);
-      }
+      picker.startPicking(daily_limit, randgen, sections, util, threadName);
 
-      warehouse.addDeliveryToStagingArea(delivery.getDeliveryItems());
-      util.printEventWithBoxes("120", "DEL", "delivery_arrived", warehouse.getStagingArea(), false);
+
+
+      /*for (int i = 0; i < 11; i++) {
+        String currentSection = picker.pickBox(warehouse);
+        if (currentSection != null) {
+          util.printPick(123, "PIC", "pick_start", i, currentSection);
+        }
+      }*/
 
       System.out.printf("%s sleeps for %d ms.\n", threadName, sleepTime);
       Thread.sleep(sleepTime);

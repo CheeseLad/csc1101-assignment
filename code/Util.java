@@ -29,8 +29,7 @@ public class Util {
   }
 
   // TODO: Update with new picker logic
-  public void printPickEvent(String tick, String thread_id, String event, String pick_id, ConcurrentHashMap<String, Integer> items) {
-    String section = items.keySet().stream().filter(item -> items.get(item) > 0).findFirst().orElse("none");
+  public void printPick(int tick, String thread_id, String event, int pick_id, String section) {
     System.out.println("tick=" + tick + " tid=" + thread_id + " event=" + event + " pick_id=" + pick_id + " section=" + section);
   }
 }
