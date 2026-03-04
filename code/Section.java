@@ -21,23 +21,26 @@ public class Section {
 		return this.boxes.isEmpty();
 	}
 
+	/**
+	 * Add a box to this section. Validates that the box's category matches.
+	 * Synchronized to protect the category check + add compound operation.
+	 */
 	public void addBox(Box box) {
 		synchronized (this) {
 			if (box.getCategory().equals(this.category)){
 				boxes.add(box);
 			}
 			else {
-				System.out.println("[ERROR] Box category does not match section category.");
+				Ticker.logMessage("SECTION", "[ERROR] Box category does not match section category.");
 			}
 		}
 	}
 
+	/**
+	 * Remove and return a box from this section (or null if empty).
+	 * ConcurrentLinkedQueue.poll() is already atomic.
+	 */
 	public Box removeBox() {
-		synchronized (this) {
-			if (!this.isEmpty()) {
-				return this.boxes.poll();
-			}
-			return null;
-		}
+		return this.boxes.poll();
 	}
 }

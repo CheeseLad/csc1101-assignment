@@ -13,14 +13,10 @@ public class StagingArea {
 	}
 
 	public boolean addBox(Box box) {
-		synchronized (this) {
-			return this.boxes.add(box);
-		}
+		return this.boxes.add(box);
 	}
 
 	public Box removeBox() {
-		synchronized (this) {
-			return this.boxes.poll();
-		}
+		return this.boxes.poll();
 	}
 }

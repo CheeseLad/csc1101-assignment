@@ -1,7 +1,9 @@
 import java.util.ArrayList;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.List;
 
 public class Ticker {
     private static final int TICKS_IN_DAY = 1000;
@@ -17,12 +19,16 @@ public class Ticker {
     private final ArrayList<Worker> workers;
     // Note: A day does not mean a real-life 24-hour day, e.g. 50ms ticks * 1000 = 50-second days
 
-    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+    private final ScheduledExecutorService tickerScheduler = Executors.newSingleThreadScheduledExecutor();
+    private final ExecutorService workerThreadPool; // fixed thread pool for worker threads
+    private List<Thread> workerThreads = new ArrayList<>();
+    private volatile boolean isShuttingDown = false;
 
-    public Ticker(int tickDuration, int totalRuntimeLength, ArrayList<Worker> workers){
+    public Ticker(int tickDuration, int totalRuntimeLength, ArrayList<Worker> workers, int threadPoolSize){
         this.tickDuration = tickDuration;
         this.totalRuntimeLength = totalRuntimeLength;
         this.workers = workers;
+        this.workerThreadPool = Executors.newFixedThreadPool(threadPoolSize);
         // register singleton instance for global access
         activeTicker = this;
     }
@@ -45,20 +51,76 @@ public class Ticker {
         return activeTicker != null ? activeTicker.currentDay : -1;
     }
 
+    /**
+     * Static accessor for tick duration (used by Worker threads).
+     */
+    public static int getTickDuration() {
+        return activeTicker != null ? activeTicker.tickDuration : -1;
+    }
+
     public int getCurrentDay(){
         return this.currentDay;
     }
 
-    public int getTickDuration(){
-        return this.tickDuration;
-    }
-
+    /**
+     * Start the ticker and submit all worker threads to the pool.
+     */
     public void start(){
-        scheduler.scheduleAtFixedRate(this::advance, 0, tickDuration, TimeUnit.MILLISECONDS);
+        // Submit all workers as tasks to the thread pool
+        for (Worker worker : workers) {
+            workerThreadPool.submit(worker);
+        }
+        
+        // Start the ticker scheduler which will count ticks and call advance()
+        tickerScheduler.scheduleAtFixedRate(this::advanceTick, 0, tickDuration, TimeUnit.MILLISECONDS);
     }
 
+    /**
+     * Stop the simulation: signal workers to stop and shutdown pools.
+     */
     public void stop(){
-        scheduler.shutdown();
+        isShuttingDown = true;
+        
+        // Signal all workers to stop
+        for (Worker worker : workers) {
+            worker.signalStop();
+        }
+        
+        // Shutdown thread pools
+        tickerScheduler.shutdown();
+        workerThreadPool.shutdown();
+        
+        try {
+            // Wait for pools to terminate
+            if (!tickerScheduler.awaitTermination(5, TimeUnit.SECONDS)) {
+                tickerScheduler.shutdownNow();
+            }
+            if (!workerThreadPool.awaitTermination(5, TimeUnit.SECONDS)) {
+                workerThreadPool.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            tickerScheduler.shutdownNow();
+            workerThreadPool.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    /**
+     * Called by ticker scheduler to advance the simulation tick.
+     * This runs in the scheduler thread, not in worker threads.
+     */
+    private void advanceTick(){
+        this.currentTick++;
+        this.totalTicksElapsed++;
+        
+        if (this.currentTick >= TICKS_IN_DAY){
+            this.currentDay++;
+            this.currentTick %= TICKS_IN_DAY;
+        }
+        if (totalTicksElapsed >= totalRuntimeLength){
+            System.out.println("Programme complete.");
+            stop();
+        }
     }
 
 
@@ -103,24 +165,7 @@ public class Ticker {
     }
 
 
-    public void advance(){
-        this.currentTick++;
-        this.totalTicksElapsed++;
-        for (Worker worker: this.workers){
-            worker.advance();
-        }
-        if (this.currentTick >= TICKS_IN_DAY){
-            this.currentDay++;
-            this.currentTick %= TICKS_IN_DAY;
-        }
-        if (totalTicksElapsed >= totalRuntimeLength){
-            System.out.println("Programme complete.");
-            stop();
-        }
-    }
-
-
     public boolean isRunning(){
-        return !this.scheduler.isShutdown();
+        return !tickerScheduler.isShutdown();
     }
 }

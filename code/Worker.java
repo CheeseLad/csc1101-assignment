@@ -1,16 +1,34 @@
-public abstract class Worker {
-    // private boolean ready = false;
-
-    // public void setReady(boolean flag) {
-    //     this.ready = flag;
-    // }
+public abstract class Worker implements Runnable {
+    // volatile flag to signal worker thread to stop
+    protected volatile boolean shouldStop = false;
     
-    // public boolean isReady() {
-    //     /**
-    //      * Is Worker ready for next tick advance?
-    //      */
-    //     return this.ready;
-    // }
+    // called by Ticker to signal shutdown
+    public void signalStop() {
+        this.shouldStop = true;
+    }
     
-    public abstract void advance(); // Ticker class calls this upon a 1-tick advance
+    /**
+     * Main run loop called when worker is executed in a thread.
+     * Each iteration sleeps briefly to throttle execution to sim ticks.
+     */
+    @Override
+    public void run() {
+        while (!shouldStop) {
+            // Call the per-tick advance method
+            advance();
+            
+            // Sleep for the duration of one tick to sync with simulation
+            int tickDuration = Ticker.getTickDuration();
+            if (tickDuration > 0) {
+                try {
+                    Thread.sleep(tickDuration);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+        }
+    }
+    
+    public abstract void advance(); // Called once per tick by run loop
 }
