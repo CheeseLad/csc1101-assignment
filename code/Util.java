@@ -1,12 +1,7 @@
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.ArrayList;
 import java.util.HashMap;
 
 public class Util {
-
-  public Util() {
-
-  }
 
   public void printEventWithBoxes(String tick, String thread_id, String event, ArrayList<Box> items, Boolean printTotal) {
     StringBuilder itemsString = new StringBuilder();

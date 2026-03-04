@@ -1,50 +1,43 @@
-import java.util.ArrayList;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class Section {
-  
-  private ArrayList<Box> boxes;
-  private String sectionCategory;
 
-  public Section(String sectionCategory) {
-    this.sectionCategory = sectionCategory;
-    this.boxes = new ArrayList<>();
-  }
+	private String category;
+	private ConcurrentLinkedQueue<Box> boxes = new ConcurrentLinkedQueue<>();
 
-  public void addBox(Box box) {
-    synchronized (this) {
-      if (box.getCategory().equals(sectionCategory)) {
-        boxes.add(box);
-      } else {
-        System.out.println("[ERROR] Box category does not match section category.");
-      }
-    }
-  }
+	public Section(String category){
+		this.category = category;
+	}
 
-  public  Box removeBox() {
-    long startWait = System.nanoTime();
+	public Box[] getBoxes() {
+		return this.boxes.toArray(new Box[boxes.size()]);
+	}
 
-    synchronized (this) {
+	public String getCategory() {
+		return this.category;
+	}
 
-        long waitedMs = (System.nanoTime() - startWait) / 1_000_000;
-        System.out.println("Waited for lock: " + waitedMs + " ms");
+	public boolean isEmpty() {
+		return this.boxes.isEmpty();
+	}
 
-      if (!boxes.isEmpty()) {
-        return boxes.remove(0);
-      } 
+	public void addBox(Box box) {
+		synchronized (this) {
+			if (box.getCategory().equals(this.category)){
+				boxes.add(box);
+			}
+			else {
+				System.out.println("[ERROR] Box category does not match section category.");
+			}
+		}
+	}
 
-      return null;
-    }
-  }
-
-  public String getCategory() {
-    return sectionCategory;
-  }
-
-  public Section getSectionByCategory(String category) {
-    if (category.equals(sectionCategory)) {
-      return this;
-    }
-
-    return null;
-  }
+	public Box removeBox() {
+		synchronized (this) {
+			if (!this.isEmpty()) {
+				return this.boxes.poll();
+			}
+			return null;
+		}
+	}
 }

@@ -1,60 +1,52 @@
-import java.util.concurrent.Executors;
-import java.util.concurrent.ExecutorService;
-import java.util.Random;
+// import java.util.concurrent.Executors;
+// import java.util.concurrent.ExecutorService;
+// import java.util.Random;
 import java.util.ArrayList;
+import java.util.HashMap;
 
 public class Main {
-  public static void main(String[] args) {
+	public static void main(String[] args) {
+		// final int THREAD_COUNT = 1;
+		final int DELIVERERS_COUNT = 1;
+		final int STOCKERS_COUNT = 1;
+		final int PICKERS_COUNT = 1;
+		final int TICK_DURATION = 50; // in miliseconds, how long a tick lasts
+		final int TOTAL_RUNTIME_DURATION = 300; // in ticks, how many ticks the programme executes
 
-    String[] categories = {"electronics", "books", "medicines", "clothes", "tools"};
+		String[] categories = {"electronics", "books", "medicines", "clothes", "tools"};
+		ArrayList<Worker> workers = new ArrayList<>();
 
-    Util util = new Util();
-    Warehouse warehouse = new Warehouse();
+		StagingArea stagingArea = new StagingArea();
+		HashMap<String, Section> sections = new HashMap<>();
 
-    ArrayList<Section> sections = new ArrayList<>();
+		for (String category : categories) {
+			Section section = new Section(category);
+			sections.putIfAbsent(category, section);
+		}
 
-    for (String category : categories) {
-      Section section = new Section(category);
-      sections.add(section);
-    }
+		for (int i = 0; i < DELIVERERS_COUNT; i++){
+			Deliverer newDeliverer = new Deliverer(categories, stagingArea);
+			workers.add(newDeliverer);
+		}
 
-    Delivery delivery = new Delivery(categories);
-    warehouse.addDeliveryToStagingArea(delivery.getDeliveryItems());
-    util.printEventWithBoxes("120", "DEL", "delivery_arrived", warehouse.getStagingArea(), false);
+		for (int i = 0; i < STOCKERS_COUNT; i++){
+			Stocker newStocker = new Stocker(stagingArea, sections);
+			workers.add(newStocker);
+		}
 
-    // Simulate stockers moving boxes from staging area to sections
-    for (Box box : warehouse.getStagingArea()) {
-      for (Section section : sections) {
-        if (section.getSectionByCategory(box.getCategory()) != null) {
-          section.addBox(box);
-          util.printPick(130, "STK", "stocked_section", 1, section.getCategory());
-          break;
-        }
-      }
-    }
+		for (int i = 0; i < PICKERS_COUNT; i++){
+			// Deliverer newPicker = new Picker();
+			// workers.add(newPicker);
+		}
 
-    Random randgen = new Random(); //  set a seed to replicate behaviour
+		Ticker ticker = new Ticker(TICK_DURATION, TOTAL_RUNTIME_DURATION, workers);
 
-    int daily_limit = randgen.nextInt(100) + 50; // Random daily limit between 50 and 150
+		// quick demonstration of logging helpers; the thread id can be
+		// any identifier you prefer (e.g. "MAIN" or worker-specific)
+		Ticker.logMessage("MAIN","starting simulation");
 
-    TaskManager P1 = new TaskManager("P1", daily_limit, sections, randgen);
-    TaskManager P2 = new TaskManager("P2", daily_limit, sections, randgen);
-    TaskManager P3 = new TaskManager("P3", daily_limit, sections, randgen);
-    TaskManager P4 = new TaskManager("P4", daily_limit, sections, randgen);
-    TaskManager P5 = new TaskManager("P5", daily_limit, sections, randgen);
+		ticker.start();
 
-    System.out.println("Starting threads");
-
-    ExecutorService threadExecutor = Executors.newFixedThreadPool(5);
-
-    threadExecutor.execute(P1);
-    threadExecutor.execute(P2);
-    threadExecutor.execute(P3);
-    threadExecutor.execute(P4);
-    threadExecutor.execute(P5);
-    threadExecutor.shutdown();
-
-    System.out.println( "Threads started, main ends\n" );
-
-  }
+		while (ticker.isRunning());
+	}
 }
