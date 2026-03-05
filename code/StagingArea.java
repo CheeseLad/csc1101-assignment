@@ -1,26 +1,61 @@
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.ReentrantLock;
 
 public class StagingArea {
 
-	private ConcurrentLinkedQueue<Box> boxes = new ConcurrentLinkedQueue<>();
+    private final ConcurrentLinkedQueue<Box> boxes = new ConcurrentLinkedQueue<>();
 
-	public Box[] getBoxes() {
-		return this.boxes.toArray(new Box[boxes.size()]);
-	}
+    private final ReentrantLock lock = new ReentrantLock(true);
 
-	public boolean isEmpty() {
-		return this.boxes.isEmpty();
-	}
+    private final Condition boxesAvailable = lock.newCondition();
+    private final Condition stagingFree = lock.newCondition();
 
-	public boolean addBox(Box box) {
-		synchronized (this) {
-			return this.boxes.add(box);
-		}
-	}
+    private boolean stockerPresent = false;
 
-	public Box removeBox() {
-		synchronized (this) {
-			return this.boxes.poll();
-		}
-	}
+    public ReentrantLock getLock(){
+        return lock;
+    }
+
+    public void addBox(Box box){
+        lock.lock();
+        try{
+            boxes.add(box);
+            boxesAvailable.signalAll();
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public Box removeBox(){
+        return boxes.poll();
+    }
+
+    public boolean isEmpty(){
+        return boxes.isEmpty();
+    }
+
+    public int getSize(){
+        return boxes.size();
+    }
+
+    public void acquireForStocker() throws InterruptedException {
+        lock.lock();
+        while(stockerPresent){
+            stagingFree.await();
+        }
+        stockerPresent = true;
+    }
+
+    public void releaseForStocker(){
+        stockerPresent = false;
+        stagingFree.signal();
+        lock.unlock();
+    }
+
+    public void waitForBoxes() throws InterruptedException {
+        while(boxes.isEmpty()){
+            boxesAvailable.await();
+        }
+    }
 }

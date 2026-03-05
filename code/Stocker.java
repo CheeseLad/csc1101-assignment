@@ -73,44 +73,70 @@ public class Stocker extends Worker {
 	}
 
 	public void take(){
-		if (this.inventorySize() < INVENTORY_LIMIT && !this.stagingArea.isEmpty()){
-			// Acquire staging area lock
-			this.status = StockerStatus.TAKING;
-			Box box = this.stagingArea.removeBox();
-			this.addToInventory(box);
-			this.timer++;
+
+		try {
+			if (status != StockerStatus.TAKING) {
+				stagingArea.acquireForStocker();
+				// Ticker.logMessage(id, "event=acquire_staging_lock");
+				status = StockerStatus.TAKING;
+			}
+
+			stagingArea.waitForBoxes();
+
+			if (!stagingArea.isEmpty() && inventorySize() < INVENTORY_LIMIT) {
+				int space = INVENTORY_LIMIT - inventorySize();
+				for (int i = 0; i < space && !stagingArea.isEmpty(); i++) {
+					Box box = stagingArea.removeBox();
+					addToInventory(box);
+				}
+				timer = 1;
+				return;
+			}
+
+			if (inventorySize() > 0) {
+				Ticker.logEventWithBoxes(id,"stocker_load",inventoryItems(),true);
+				stagingArea.releaseForStocker();
+				// Ticker.logMessage(id,"event=release_staging_lock");
+				moveTo(peekInventoryCategory());
+				return;
+			}
+
 		}
-		else if (this.inventorySize() == 0) {
-			this.status = StockerStatus.WAITING; // Cannot do anything, wait (keep lock as no other stocker can get anything anyway)
-		}
-		else {
-			// about to leave staging, log loaded inventory
-			Ticker.logEventWithBoxes(id, "stocker_load", inventoryItems(), true);
-			// Release staging area lock
-			this.moveTo(peekInventoryCategory()); // Move to a section to start stocking
+		catch (InterruptedException e){
+			Thread.currentThread().interrupt();
 		}
 	}
 
 	public void stock(){
-		if (this.inventorySize() == 0){
-			// no inventory left; move back to staging (moveTo will log stock_end if needed)
-			this.moveTo("staging"); // "restock" stocker at staging area
+		Section currentSection = this.sections.get(this.position);
+
+		if (status != StockerStatus.STOCKING) {
+
+			currentSection.getStockerLock().lock();
+			// Ticker.logMessage(id, "event=acquire_" + position + "_lock");
+
+			Ticker.logMessage(id,
+				"event=stock_begin section=" + position + " amount=" + currentStockTarget);
+
+			status = StockerStatus.STOCKING;
 		}
-		else if (this.inventoryContainsCategory(this.position)){
-			// Acquire current section lock
-			if (this.status != StockerStatus.STOCKING) {
-				// starting a new stocking session
-				Ticker.logMessage(id, "event=stock_begin section=" + this.position + " amount=" + currentStockTarget);
-			}
-			this.status = StockerStatus.STOCKING;
+
+		if (this.inventoryContainsCategory(this.position)){
 			Box box = removeFromInventory(this.position);
-			this.sections.get(this.position).addBox(box);
+			currentSection.addBox(box);
 			this.timer++;
 			currentStocked++;
 		}
 		else {
-			// Release current section lock if held
-			this.moveTo(peekInventoryCategory()); // Move to a section that has boxes in inventory
+			currentSection.getStockerLock().unlock();
+			// Ticker.logMessage(id, "event=release_" + this.position + "_lock");
+			String nextPosition = peekInventoryCategory();
+			if (nextPosition == null) {
+				this.moveTo("staging");
+			}
+			else {
+				this.moveTo(nextPosition);
+			}
 		}
 	}
 
@@ -139,7 +165,7 @@ public class Stocker extends Worker {
 			if (this.status == StockerStatus.WAITING ||
 				this.status == StockerStatus.MOVING
 			){ // Waiting or arrived at destination
-				if (this.position == "staging"){
+				if (this.position.equals("staging")){
 					this.take();
 				}
 				else {

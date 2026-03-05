@@ -1,16 +1,19 @@
-public abstract class Worker {
-    // private boolean ready = false;
+public abstract class Worker implements Runnable {
 
-    // public void setReady(boolean flag) {
-    //     this.ready = flag;
-    // }
-    
-    // public boolean isReady() {
-    //     /**
-    //      * Is Worker ready for next tick advance?
-    //      */
-    //     return this.ready;
-    // }
-    
-    public abstract void advance(); // Ticker class calls this upon a 1-tick advance
+    private int lastTick = -1;
+
+    @Override
+    public void run() {
+        Ticker ticker = Ticker.getActiveTicker();
+        while (true) {
+            int tick = ticker.waitForNextTick(lastTick);
+            if (tick < 0) {
+                break;
+            }
+            lastTick = tick;
+            advance();
+        }
+    }
+
+    public abstract void advance();
 }

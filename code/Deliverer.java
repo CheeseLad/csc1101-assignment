@@ -40,9 +40,8 @@ public class Deliverer extends Worker {
      * 1-tick elapse. Decrement wait/idle counters and perform other checks
      */
 		if (RNG.nextFloat() <= 0.01){ // Peform a delivery every 100 ticks on average
-			deliver();
-			// stash a quick summary of the staging area size if desired
-			Ticker.logMessage(id, "staging=" + stagingArea.getBoxes().length);
+			// Ticker.logMessage(id, "staging_stock=" + stagingArea.getSize());
+			deliver();			
 		}
   	}
 }
