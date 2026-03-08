@@ -55,7 +55,7 @@ public class Stocker extends Worker {
 
 	private Box removeFromInventory(String category){
 		Box box = inventory.get(category).poll();
-		inventorySize--;
+		if (box != null) inventorySize--;
 		return box;
 	}
 
@@ -78,26 +78,24 @@ public class Stocker extends Worker {
 		try {
 			if (status != StockerStatus.TAKING) {
 				stagingArea.acquireForStocker();
-				// Ticker.logMessage(id, "event=acquire_staging_lock");
 				status = StockerStatus.TAKING; 
 			}
 
 			stagingArea.waitForBoxes();
 
-			if (!stagingArea.isEmpty() && getInventorySize() < INVENTORY_LIMIT) {
-				int space = INVENTORY_LIMIT - getInventorySize();
+			if (!stagingArea.isEmpty() && inventorySize < INVENTORY_LIMIT) {
+				int space = INVENTORY_LIMIT - inventorySize;
 				for (int i = 0; i < space && !stagingArea.isEmpty(); i++) {
 					Box box = stagingArea.removeBox();
 					addToInventory(box);
 				}
+				Ticker.logEventWithBoxes(id,"stocker_load",getInventoryItems(),true);
 				timer = 1;
 				return;
 			}
 
-			if (getInventorySize() > 0) {
-				Ticker.logEventWithBoxes(id,"stocker_load",getInventoryItems(),true);
+			if (inventorySize > 0) {
 				stagingArea.releaseForStocker();
-				// Ticker.logMessage(id,"event=release_staging_lock");
 				moveTo(peekInventoryCategory());
 				return;
 			}
@@ -114,7 +112,6 @@ public class Stocker extends Worker {
 		if (status != StockerStatus.STOCKING) {
 
 			currentSection.getStockerLock().lock();
-			// Ticker.logMessage(id, "event=acquire_" + position + "_lock");
 
 			Ticker.logMessage(id,
 				"event=stock_begin section=" + position + " amount=" + currentStockTarget);
@@ -130,7 +127,6 @@ public class Stocker extends Worker {
 		}
 		else {
 			currentSection.getStockerLock().unlock();
-			// Ticker.logMessage(id, "event=release_" + this.position + "_lock");
 			String nextPosition = peekInventoryCategory();
 			if (nextPosition == null) {
 				this.moveTo("staging");

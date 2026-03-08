@@ -31,6 +31,8 @@ public class Deliverer extends Worker {
 				stagingArea.addBox(newBox);
 				delivered.add(newBox);
 			}
+			stagingArea.signalBoxesAvailable();
+
 			// log the arrival event with counts of delivered boxes
 			Ticker.logEventWithBoxes(id, "delivery_arrived", delivered, false);
 		}
