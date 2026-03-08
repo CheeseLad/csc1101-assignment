@@ -11,7 +11,7 @@ public class Main {
 		final int PICKERS_COUNT = 0;
 		final int THREAD_COUNT = DELIVERERS_COUNT + STOCKERS_COUNT + PICKERS_COUNT;
 		final int TICK_DURATION = 50; // in miliseconds, how long a tick lasts
-		final int TOTAL_RUNTIME_TICKS = 300; // in ticks, how many ticks the programme executes
+		final int TOTAL_RUNTIME_TICKS = 1000; // in ticks, how many ticks the programme executes
 
 		// Adjust categories array to determine available sections
 		String[] categories = {"electronics", "books", "medicines", "clothes", "tools"};

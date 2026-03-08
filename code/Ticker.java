@@ -74,6 +74,14 @@ public class Ticker {
 
     public void stop(){
         scheduler.shutdown();
+
+        tickLock.lock();
+        try {
+            tickAdvanced.signalAll(); // Wake all working threads to ensure exit
+        } finally {
+            tickLock.unlock();
+        }
+        threadExecutor.shutdown();
     }
 
     // WORKER WAITING HANDLER
@@ -102,7 +110,6 @@ public class Ticker {
         HashMap<String, Integer> _itemCounts = new HashMap<>();
         String tickStr = tick < 0 ? "?" : Integer.toString(tick);
         StringBuilder itemsString = new StringBuilder();
-        _itemCounts.clear();
         int total = 0;
         for (Box box : items) {
             String item = box.getCategory();

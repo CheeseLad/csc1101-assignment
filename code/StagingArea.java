@@ -8,7 +8,6 @@ public class StagingArea {
 
     private final ReentrantLock stagingAreaLock = new ReentrantLock(true);
 
-    private final Condition boxesAvailable = stagingAreaLock.newCondition();
     private final Condition stagingFree = stagingAreaLock.newCondition();
 
     private boolean stockerPresent = false;
@@ -33,10 +32,6 @@ public class StagingArea {
         return boxes.size();
     }
 
-    public void signalBoxesAvailable(){
-        boxesAvailable.signalAll();
-    }
-
     public void acquireForStocker() throws InterruptedException {    
         stagingAreaLock.lock();
         while(stockerPresent){
@@ -49,11 +44,5 @@ public class StagingArea {
         stockerPresent = false;
         stagingFree.signal();
         stagingAreaLock.unlock();
-    }
-
-    public void waitForBoxes() throws InterruptedException {
-        while(boxes.isEmpty()){
-            boxesAvailable.await();
-        }
     }
 }

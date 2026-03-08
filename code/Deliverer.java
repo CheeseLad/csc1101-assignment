@@ -23,7 +23,7 @@ public class Deliverer extends Worker {
 	public void deliver(){
 		int amountOfChoices = categories.length;
 		ArrayList<Box> delivered = new ArrayList<>();
-		stagingArea.getLock().lock();
+		stagingArea.getLock().lock(); // Ensure atomic delivery of 10 boxes at once (despite thread-safe queue)
 		try {
 			for (int i = 0; i < DELIVERY_SIZE; i++){
 				int randomIndex = RNG.nextInt(amountOfChoices);
@@ -31,7 +31,6 @@ public class Deliverer extends Worker {
 				stagingArea.addBox(newBox);
 				delivered.add(newBox);
 			}
-			stagingArea.signalBoxesAvailable();
 
 			// log the arrival event with counts of delivered boxes
 			Ticker.logEventWithBoxes(id, "delivery_arrived", delivered, false);

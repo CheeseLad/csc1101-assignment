@@ -14,9 +14,10 @@ public class Stocker extends Worker {
 	private int inventorySize = 0;
 	private String position = "staging";
 	private StockerStatus status = StockerStatus.WAITING;
-	private int timer = 0;
+	private int readyTick = 0;
 	private StagingArea stagingArea;
 	private HashMap<String, Section> sections;
+	private String nextMoveTarget = null;
 
 	// bookkeeping for current stocking session
 	private int currentStockTarget = 0;  // how many we intended to stock this trip
@@ -70,40 +71,43 @@ public class Stocker extends Worker {
 
 
 	// BEHAVIOUR HANDLING
-	public void take(){
+	public void take() {
 		try {
-			if (status != StockerStatus.TAKING) {
+			if (status != StockerStatus.TAKING) { // Not yet taking, try to acquire lock
 				stagingArea.acquireForStocker();
-				status = StockerStatus.TAKING; 
+				status = StockerStatus.TAKING;
 			}
 
-			stagingArea.waitForBoxes();
-
-			if (!stagingArea.isEmpty() && inventorySize < INVENTORY_LIMIT) {
-				int space = INVENTORY_LIMIT - inventorySize;
-				for (int i = 0; i < space && !stagingArea.isEmpty(); i++) {
-					Box box = stagingArea.removeBox();
-					addToInventory(box);
-				}
-				Ticker.logEventWithBoxes(id,"stocker_load",getInventoryItems(),true);
-				timer = 1;
-				return;
-			}
-
-			if (inventorySize > 0) {
+			if (stagingArea.isEmpty()) { // Cannot take anything, wait instead
 				stagingArea.releaseForStocker();
-				moveTo(peekInventoryCategory());
+				status = StockerStatus.WAITING;
 				return;
 			}
 
-		}
-		catch (InterruptedException e){
+			// Fill up inventory as much as possible
+			int space = INVENTORY_LIMIT - inventorySize;
+
+			for (int i = 0; i < space && !stagingArea.isEmpty(); i++) {
+				Box box = stagingArea.removeBox();
+				addToInventory(box);
+			}
+
+			Ticker.logEventWithBoxes(id,"stocker_load",getInventoryItems(),true);
+
+			stagingArea.releaseForStocker(); // Taking complete, release lock
+
+			nextMoveTarget = peekInventoryCategory(); // Save where to move (so we can move there on next tick)
+
+			readyTick = Ticker.getCurrentTick() + 1;
+			status = StockerStatus.MOVING;
+
+		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
 		}
 	}
 
 	public void stock(){
-		Section currentSection = this.sections.get(this.position);
+		Section currentSection = sections.get(position);
 
 		if (status != StockerStatus.STOCKING) {
 
@@ -115,20 +119,20 @@ public class Stocker extends Worker {
 			status = StockerStatus.STOCKING;
 		}
 
-		if (this.inventoryContainsCategory(this.position)){
-			Box box = removeFromInventory(this.position);
+		if (inventoryContainsCategory(position)){
+			Box box = removeFromInventory(position);
 			currentSection.addBox(box);
-			this.timer++;
+			readyTick = Ticker.getCurrentTick() + 1;
 			currentStocked++;
 		}
 		else {
 			currentSection.getStockerLock().unlock();
 			String nextPosition = peekInventoryCategory();
 			if (nextPosition == null) {
-				this.moveTo("staging");
+				moveTo("staging");
 			}
 			else {
-				this.moveTo(nextPosition);
+				moveTo(nextPosition);
 			}
 		}
 	}
@@ -149,29 +153,45 @@ public class Stocker extends Worker {
 		}
 		this.status = StockerStatus.MOVING;
 		this.position = position;
-		this.timer = 10 + inventory.size();
+		readyTick = Ticker.getCurrentTick() + 10 + inventorySize;
 	}
 
 	// MAIN PER-TICK RUNNER
 	public void advance(){
-		if (timer > 0) timer--;
-		if (timer == 0) { // Previous action expired
-			if (status == StockerStatus.WAITING ||
-				status == StockerStatus.MOVING
-			){ // Waiting or arrived at destination
-				if (position.equals("staging")){
+
+		int tick = Ticker.getCurrentTick();
+
+		if (tick < readyTick){
+			return;
+		}
+
+		switch(status){
+
+			case WAITING:
+				if(position.equals("staging"))
 					take();
-				}
-				else { // At a section
+				else
 					stock();
+				break;
+
+			case MOVING:
+				if (nextMoveTarget != null) { // We have a target destination, move to it
+					moveTo(nextMoveTarget);
+					nextMoveTarget = null;
 				}
-			}
-			else if (status == StockerStatus.TAKING) {
-				take(); // Continue taking
-			}
-			else if (status == StockerStatus.STOCKING) {
-				stock(); // Continue stocking
-			}
+				else if(position.equals("staging")) // Movement complete, check position
+					take();
+				else
+					stock();
+				break;
+
+			case TAKING:
+				take();
+				break;
+
+			case STOCKING:
+				stock();
+				break;
 		}
 	}
 }
