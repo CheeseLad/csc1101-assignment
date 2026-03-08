@@ -61,12 +61,20 @@ public class Stocker extends Worker {
 	}
 
 	private String peekInventoryCategory(){
-		for (String category: this.inventory.keySet()){
-			if (!this.inventory.get(category).isEmpty()){
-				return category;
+		// Gets the next category with the highest quantity of boxes (semi-randomisation + optimal to reduce travel costs)
+		
+		String chosenCategory = null;
+		int maxCount = 0;
+		
+		for (String category: inventory.keySet()){
+			ConcurrentLinkedQueue<Box> queue = inventory.get(category);
+			int size = queue.size();
+			if (size > maxCount){
+				maxCount = size;
+				chosenCategory = category;
 			}
 		}
-		return null;
+		return chosenCategory;
 	}
 
 
