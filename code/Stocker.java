@@ -42,10 +42,6 @@ public class Stocker extends Worker {
 		return items;
 	}
 
-	private int getInventorySize(){
-		return inventorySize;
-	}
-
 	// INVENTORY HANDLING
 	private void addToInventory(Box box){
 		inventory.putIfAbsent(box.getCategory(), new ConcurrentLinkedQueue<>());
@@ -141,10 +137,10 @@ public class Stocker extends Worker {
 		// if we were in the middle of stocking, emit end event before leaving
 		if (this.status == StockerStatus.STOCKING) {
 			Ticker.logMessage(id, "event=stock_end section=" + this.position +
-				" stocked=" + currentStocked + " remaining_load=" + getInventorySize());
+				" stocked=" + currentStocked + " remaining_load=" + inventorySize);
 		}
 		String from = this.position;
-		int load = this.getInventorySize();
+		int load = this.inventorySize;
 		Ticker.logMessage(id, "event=move from=" + from + " to=" + position + " load=" + load);
 		// when heading to a new section (not staging) set up stock counters
 		if (!position.equals("staging")){
