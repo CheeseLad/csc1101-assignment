@@ -44,7 +44,7 @@ public class Main {
 
 		// Generate & start ticker
 		Ticker.initialise(TICK_DURATION, TOTAL_RUNTIME_TICKS, workers, THREAD_COUNT);
-		Ticker.logMessage("MAIN","starting simulation");
+		Logging.logMessage("MAIN","starting simulation");
 		Ticker.getInstance().start();
 	}
 }

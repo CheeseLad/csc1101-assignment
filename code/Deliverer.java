@@ -13,7 +13,7 @@ public class Deliverer extends Worker {
   	public Deliverer(String[] categories, StagingArea stagingArea) {
 		this.categories = categories;
 		this.stagingArea = stagingArea;
-		this.id = "DEL" + nextId++;
+		this.id = "D" + nextId++;
 	}
 
 	public String getId() {
@@ -33,7 +33,7 @@ public class Deliverer extends Worker {
 			}
 
 			// log the arrival event with counts of delivered boxes
-			Ticker.logEventWithBoxes(id, "delivery_arrived", delivered, false);
+			Logging.logEventWithBoxes(id, "delivery_arrived", delivered, false);
 		}
 		finally {
 			stagingArea.getLock().unlock();
