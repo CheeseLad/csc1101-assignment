@@ -4,9 +4,8 @@ public abstract class Worker implements Runnable {
 
     @Override
     public void run() {
-        Ticker ticker = Ticker.getActiveTicker();
-        while (true) {
-            int tick = ticker.waitForNextTick(lastTick);
+        while (Ticker.getInstance().isRunning()) {
+            int tick = Ticker.getInstance().waitForNextTick(lastTick);
             if (tick < 0) {
                 break;
             }

@@ -11,19 +11,22 @@ public class Main {
 		final int PICKERS_COUNT = 0;
 		final int THREAD_COUNT = DELIVERERS_COUNT + STOCKERS_COUNT + PICKERS_COUNT;
 		final int TICK_DURATION = 50; // in miliseconds, how long a tick lasts
-		final int TOTAL_RUNTIME_DURATION = 300; // in ticks, how many ticks the programme executes
+		final int TOTAL_RUNTIME_TICKS = 300; // in ticks, how many ticks the programme executes
 
+		// Adjust categories array to determine available sections
 		String[] categories = {"electronics", "books", "medicines", "clothes", "tools"};
-		ArrayList<Worker> workers = new ArrayList<>();
 
-		StagingArea stagingArea = new StagingArea();
-		HashMap<String, Section> sections = new HashMap<>();
+		ArrayList<Worker> workers = new ArrayList<>(); // All Deliverers, Stockers and Pickers
+		StagingArea stagingArea = new StagingArea(); // Assuming single staging area
+		HashMap<String, Section> sections = new HashMap<>(); // category -> section object
 
+		// Generate sections from available categories
 		for (String category : categories) {
 			Section section = new Section(category);
 			sections.putIfAbsent(category, section);
 		}
 
+		// Generate workers
 		for (int i = 0; i < DELIVERERS_COUNT; i++){
 			Deliverer newDeliverer = new Deliverer(categories, stagingArea);
 			workers.add(newDeliverer);
@@ -39,14 +42,9 @@ public class Main {
 			// workers.add(newPicker);
 		}
 
-		Ticker ticker = new Ticker(TICK_DURATION, TOTAL_RUNTIME_DURATION, workers, THREAD_COUNT);
-
-		// quick demonstration of logging helpers; the thread id can be
-		// any identifier you prefer (e.g. "MAIN" or worker-specific)
+		// Generate & start ticker
+		Ticker.initialise(TICK_DURATION, TOTAL_RUNTIME_TICKS, workers, THREAD_COUNT);
 		Ticker.logMessage("MAIN","starting simulation");
-
-		ticker.start();
-
-		while (ticker.isRunning());
+		Ticker.getInstance().start();
 	}
 }

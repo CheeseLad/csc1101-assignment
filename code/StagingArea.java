@@ -6,25 +6,19 @@ public class StagingArea {
 
     private final ConcurrentLinkedQueue<Box> boxes = new ConcurrentLinkedQueue<>();
 
-    private final ReentrantLock lock = new ReentrantLock(true);
+    private final ReentrantLock stagingAreaLock = new ReentrantLock(true);
 
-    private final Condition boxesAvailable = lock.newCondition();
-    private final Condition stagingFree = lock.newCondition();
+    private final Condition boxesAvailable = stagingAreaLock.newCondition();
+    private final Condition stagingFree = stagingAreaLock.newCondition();
 
     private boolean stockerPresent = false;
 
     public ReentrantLock getLock(){
-        return lock;
+        return stagingAreaLock;
     }
 
     public void addBox(Box box){
-        lock.lock();
-        try{
-            boxes.add(box);
-            boxesAvailable.signalAll();
-        } finally {
-            lock.unlock();
-        }
+        boxes.add(box);
     }
 
     public Box removeBox(){
@@ -40,7 +34,7 @@ public class StagingArea {
     }
 
     public void acquireForStocker() throws InterruptedException {
-        lock.lock();
+        stagingAreaLock.lock();
         while(stockerPresent){
             stagingFree.await();
         }
@@ -50,7 +44,7 @@ public class StagingArea {
     public void releaseForStocker(){
         stockerPresent = false;
         stagingFree.signal();
-        lock.unlock();
+        stagingAreaLock.unlock();
     }
 
     public void waitForBoxes() throws InterruptedException {

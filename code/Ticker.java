@@ -1,4 +1,5 @@
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -9,8 +10,7 @@ import java.util.concurrent.locks.ReentrantLock;
 public class Ticker {
     private static final int TICKS_IN_DAY = 1000;
     
-    // singleton instance so that other classes can query the current tick/day
-    private static Ticker activeTicker = null;
+    private static Ticker instance = null;
 
     private int currentTick = 0; // Measures current tick in the day (resetting to 0 on new day).
     private int currentDay = 0; // 1 day = 1000 ticks. This value increments by 1 once 1000 ticks pass.
@@ -25,48 +25,49 @@ public class Ticker {
     private final ReentrantLock tickLock = new ReentrantLock();
     private final Condition tickAdvanced = tickLock.newCondition();
 
-    public Ticker(int tickDuration, int totalRuntimeLength, ArrayList<Worker> workers, int num_threads){
+
+    private Ticker(int tickDuration, int totalRuntimeLength, ArrayList<Worker> workers, int numThreads){
         this.tickDuration = tickDuration;
         this.totalRuntimeLength = totalRuntimeLength;
         this.workers = workers;
-        this.threadExecutor = Executors.newFixedThreadPool(num_threads);
-        // register singleton instance for global access
-        activeTicker = this;
+        this.threadExecutor = Executors.newFixedThreadPool(numThreads);
     }
 
-    public int getCurrentTick(){
-        return this.currentTick;
+
+    public static void initialise(int tickDuration, int totalRuntimeLength, ArrayList<Worker> workers, int numThreads){
+        // Ensures single instance of Ticker only (singleton)
+
+        if (instance != null) {
+            throw new IllegalStateException("Ticker already initialised!");
+        }
+
+        instance = new Ticker(tickDuration, totalRuntimeLength, workers, numThreads);
     }
 
-    /**
-     * Static accessor for the currently running ticker (may return -1 if none exists).
-     */
-    public static int getCurrentTickStatic() {
-        return activeTicker != null ? activeTicker.currentTick : -1;
+    // GETTERS
+    public static Ticker getInstance(){
+        if (instance == null){
+            throw new IllegalStateException("Ticker not initialised!");
+        }
+        return instance;
     }
 
-    /**
-     * Static accessor for the current day of the running ticker.
-     */
-    public static int getCurrentDayStatic() {
-        return activeTicker != null ? activeTicker.currentDay : -1;
+    public static int getCurrentTick(){
+        return getInstance().currentTick;
     }
 
-    public static Ticker getActiveTicker(){
-        return activeTicker;
+    public static int getCurrentDay(){
+        return getInstance().currentDay;
     }
 
-    public int getCurrentDay(){
-        return this.currentDay;
+    public static int getTickDuration(){
+        return getInstance().tickDuration;
     }
 
-    public int getTickDuration(){
-        return this.tickDuration;
-    }
-
+    // RUNNERS
     public void start(){
-        for (Worker worker : this.workers){
-            this.threadExecutor.submit(worker);
+        for (Worker worker : workers){
+            threadExecutor.submit(worker);
         }
         scheduler.scheduleAtFixedRate(this::advance, 0, tickDuration, TimeUnit.MILLISECONDS);
     }
@@ -75,15 +76,15 @@ public class Ticker {
         scheduler.shutdown();
     }
 
+    // WORKER WAITING HANDLER
     public int waitForNextTick(int lastTick) {
 
         tickLock.lock();
         try {
-
             while (currentTick == lastTick && !scheduler.isShutdown()) {
                 tickAdvanced.await();
             }
-
+            
             return scheduler.isShutdown() ? -1 : currentTick;
 
         } catch (InterruptedException e) {
@@ -95,26 +96,21 @@ public class Ticker {
         }
     }
 
-
-    private static final java.util.HashMap<String, Integer> _tempCounts = new java.util.HashMap<>();
-
-    /**
-     * Log an event with a list of boxes.  The tick value is looked up
-     * from the active ticker if available.
-     */
+    // LOGGERS
     public static void logEventWithBoxes(String threadId, String event, java.util.ArrayList<Box> items, boolean printTotal) {
-        int tick = getCurrentTickStatic();
+        int tick = getCurrentTick();
+        HashMap<String, Integer> _itemCounts = new HashMap<>();
         String tickStr = tick < 0 ? "?" : Integer.toString(tick);
         StringBuilder itemsString = new StringBuilder();
-        _tempCounts.clear();
+        _itemCounts.clear();
         int total = 0;
         for (Box box : items) {
             String item = box.getCategory();
-            _tempCounts.put(item, _tempCounts.getOrDefault(item, 0) + 1);
+            _itemCounts.put(item, _itemCounts.getOrDefault(item, 0) + 1);
         }
-        for (String item : _tempCounts.keySet()) {
-            itemsString.append(item).append("=").append(_tempCounts.get(item)).append(" ");
-            total += _tempCounts.get(item);
+        for (String item : _itemCounts.keySet()) {
+            itemsString.append(item).append("=").append(_itemCounts.get(item)).append(" ");
+            total += _itemCounts.get(item);
         }
 
         if (printTotal) {
@@ -124,9 +120,8 @@ public class Ticker {
         }
     }
 
-
     public static void logMessage(String threadId, String message) {
-        int tick = getCurrentTickStatic();
+        int tick = getCurrentTick();
         String tickStr = tick < 0 ? "?" : Integer.toString(tick);
         if (message.startsWith("event=")) {
             // already formatted as an event
@@ -136,7 +131,7 @@ public class Ticker {
         }
     }
 
-
+    // MAIN FUNCTION EXECUTED EVERY <tickDuration> ms
     public void advance(){
         tickLock.lock();
         try {
@@ -161,8 +156,8 @@ public class Ticker {
         }
     }
 
-
+    // STATUS CHECKERS
     public boolean isRunning(){
-        return !this.scheduler.isShutdown();
+        return !scheduler.isShutdown();
     }
 }
