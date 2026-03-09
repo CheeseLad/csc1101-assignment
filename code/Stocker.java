@@ -35,6 +35,10 @@ public class Stocker extends Worker {
 		return id;
 	}
 
+	public int getInventorySize(){
+		return inventorySize;
+	}
+
 	private ArrayList<Box> getInventoryItems(){
 		ArrayList<Box> items = new ArrayList<>();
 		for (ConcurrentLinkedQueue<Box> queue: inventory.values()){

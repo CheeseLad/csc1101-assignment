@@ -32,7 +32,7 @@ public class StagingArea {
         return boxes.size();
     }
 
-    public void acquireForStocker() throws InterruptedException {    
+    public void acquireForStocker() throws InterruptedException {  
         stagingAreaLock.lock();
         while(stockerPresent){
             stagingFree.await();

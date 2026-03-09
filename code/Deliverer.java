@@ -9,6 +9,7 @@ public class Deliverer extends Worker {
 	private StagingArea stagingArea;
 	private static int nextId = 1;
 	private final String id;
+	private static int totalDeliveries = 0;
 
   	public Deliverer(String[] categories, StagingArea stagingArea) {
 		this.categories = categories;
@@ -18,6 +19,10 @@ public class Deliverer extends Worker {
 
 	public String getId() {
 		return id;
+	}
+
+	public int getTotalDeliveries() {
+		return totalDeliveries;
 	}
 
 	public void deliver(){
@@ -31,6 +36,7 @@ public class Deliverer extends Worker {
 				stagingArea.addBox(newBox);
 				delivered.add(newBox);
 			}
+			totalDeliveries++;
 
 			// log the arrival event with counts of delivered boxes
 			Logging.logEventWithBoxes(id, "delivery_arrived", delivered, false);
