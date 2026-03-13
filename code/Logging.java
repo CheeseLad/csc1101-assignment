@@ -23,6 +23,14 @@ public class Logging {
         }
     }
 
+    public static void logPickerEvent(String threadId, String event, int pickId, String Section) {
+        int tick = Ticker.getCurrentTick();
+        String tickStr = tick < 0 ? "?" : Integer.toString(tick);
+        String pickStr = pickId < 0 ? "?" : Integer.toString(pickId);
+
+        System.out.println("tick=" + tickStr + " tid=" + threadId + " event=" + event + " pick_id=" + pickId + " section=" + Section);
+    }
+
     public static void logMessage(String threadId, String message) {
         int tick = Ticker.getCurrentTick();
         String tickStr = tick < 0 ? "?" : Integer.toString(tick);

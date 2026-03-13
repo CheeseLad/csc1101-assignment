@@ -8,7 +8,7 @@ public class Main {
 	public static void main(String[] args) {
 		final int DELIVERERS_COUNT = 1;
 		final int STOCKERS_COUNT = 3;
-		final int PICKERS_COUNT = 0;
+		final int PICKERS_COUNT = 3;
 		final int THREAD_COUNT = DELIVERERS_COUNT + STOCKERS_COUNT + PICKERS_COUNT;
 		final int TICK_DURATION = 50; // in miliseconds, how long a tick lasts
 		final int TOTAL_RUNTIME_TICKS = 500; // in ticks, how many ticks the programme executes
@@ -38,8 +38,8 @@ public class Main {
 		}
 
 		for (int i = 0; i < PICKERS_COUNT; i++){
-			// Deliverer newPicker = new Picker();
-			// workers.add(newPicker);
+			Picker newPicker = new Picker(sections);
+			workers.add(newPicker);
 		}
 
 		// Generate & start ticker
@@ -56,12 +56,16 @@ public class Main {
 		int totalDeliveries = 0;
 		int totalSectionBoxes = 0;
 		int leftoverInventory = 0;
+		int totalPickedBoxes = 0;
 		for (Worker worker : workers) {
 			if (worker instanceof Deliverer) {
 				totalDeliveries += ((Deliverer) worker).getTotalDeliveries();
 			}
 			else if (worker instanceof Stocker) {
 				leftoverInventory += ((Stocker) worker).getInventorySize();
+			}
+			else if (worker instanceof Picker) {
+				totalPickedBoxes += ((Picker) worker).getTotalPickedBoxes();
 			}
 		}
 		System.out.println("Total Deliveries: " + totalDeliveries);
@@ -76,6 +80,7 @@ public class Main {
 		System.out.println("Stockers Combined Inventories: " + leftoverInventory);
 
 		System.out.println("Total Processed Boxes: " + (totalSectionBoxes + leftoverInventory + stagingArea.getSize()));
+		System.out.println("Total Picked Boxes: " + totalPickedBoxes);
 		System.out.println("Total Processed should match 10 * Deliveries!");
 	}
 }
