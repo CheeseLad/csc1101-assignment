@@ -6,6 +6,7 @@ public class Section {
 	private String category;
 	private ConcurrentLinkedQueue<Box> boxes = new ConcurrentLinkedQueue<>();
 	private final ReentrantLock sectionStockerLock = new ReentrantLock(true);
+	private final ReentrantLock sectionPickerLock = new ReentrantLock(true);
 
 	public Section(String category){
 		this.category = category;
@@ -13,7 +14,15 @@ public class Section {
 
 	public ReentrantLock getStockerLock(){
         return this.sectionStockerLock;
-    }
+  }
+
+	public void acquireForPicker() throws InterruptedException {  
+        sectionPickerLock.lock();
+  }
+
+  public void releaseForPicker(){
+        sectionPickerLock.unlock();
+  }
 
 	public int getSize() {
 		return this.boxes.size();
