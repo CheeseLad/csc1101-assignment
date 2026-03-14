@@ -13,7 +13,7 @@ public class Picker extends Worker {
 
 	private final String id;
 	private static int nextId = 1;
-  private int pickId = 1;
+  private static int pickId = 1;
 	private ConcurrentHashMap<String, ConcurrentLinkedQueue<Box>> inventory = new ConcurrentHashMap<>();
 	private int inventorySize = 0;
 	private String position = "sections";
@@ -22,21 +22,31 @@ public class Picker extends Worker {
 	private HashMap<String, Section> sections;
 	private String nextMoveTarget = null;
   private Box currentBox;
+  private static int totalRuntimeTicks;
 
 	// bookkeeping for current stocking session
 	private int currentPickTarget = 0;  // how many we intended to stock this trip
 	//private int currentPicked = 0;      // how many we've already moved
 
-  private static final long SEED = 12345L; // Seed for replicatable behaviour
-	private static final Random RNG = new Random(SEED); // RNG for random section picking
+	private static Random RNG = null;
 
   private int waitedTicks = 0; // For logging purposes, how many ticks we've been waiting for
   private int totalPickedBoxes = 0; // For logging purposes, how many boxes we've picked in total
   
-  public Picker(HashMap<String, Section> sections) {
+  public Picker(HashMap<String, Section> sections, int totalRuntimeTicks, long seed) {
     this.sections = sections;
     this.id = "P" + nextId++;
     this.currentBox = null;
+    this.totalRuntimeTicks = totalRuntimeTicks;
+    this.RNG = new Random(seed); // RNG for random section picking
+  }
+
+  public synchronized int nextPickId() {
+    return pickId++;
+  }
+
+  public synchronized int getTotalPicks() {
+    return pickId - 1;
   }
 
   // GETTERS
@@ -95,7 +105,7 @@ public class Picker extends Worker {
         System.out.println(this.id + " found no boxes to pick in section " + section.getCategory() + " and released lock.");
         status = PickerStatus.WAITING;
         section.releaseForPicker();
-        readyTick = Ticker.getCurrentTick() + 500 / 5;
+        readyTick = Ticker.getCurrentTick() + totalRuntimeTicks / 10;
 				return;
 			}
 
@@ -110,11 +120,13 @@ public class Picker extends Worker {
         this.status = PickerStatus.WAITING;
         System.out.println(this.pickId + " finished picking from section " + section.getCategory() + ". Inventory size: " + inventorySize);
         pickId++;
-        readyTick = Ticker.getCurrentTick() + 500 / 5;
+        readyTick = Ticker.getCurrentTick() + totalRuntimeTicks / 5;
         return;
       }*/
 
-      Logging.logPickerEvent(this.id, "pick_start", pickId, section.getCategory());
+      int newPickId = nextPickId();
+
+      Logging.logPickerEvent(this.id, "pick_start", newPickId, section.getCategory());
 
       for (int i = 0; i < space && !section.isEmpty(); i++) {
 				Box box = section.removeBox();
@@ -128,12 +140,12 @@ public class Picker extends Worker {
       System.out.println(this.id + " finished picking from section " + section.getCategory() + ". Current inventory size: " + inventorySize + ". Section size: (before/after) " + currentSectionSize +"/" + (section.getSize()));
       //readyTick = Ticker.getCurrentTick() + inventorySize;
 
-      Logging.logPickerEvent(this.id, "pick_done", pickId, section.getCategory());
+      Logging.logPickerEvent(this.id, "pick_done", newPickId, section.getCategory());
     
-      pickId++;
       this.status = PickerStatus.WAITING;
       section.releaseForPicker();
-      readyTick = Ticker.getCurrentTick() + 500 + inventorySize / 5;
+      //readyTick = Ticker.getCurrentTick() + totalRuntimeTicks + inventorySize / 5;
+      readyTick = Ticker.getCurrentTick() + totalRuntimeTicks / 10;
       return;
     }catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
