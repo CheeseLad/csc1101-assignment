@@ -123,7 +123,7 @@ public class Stocker extends Worker {
 
 		if (status != StockerStatus.STOCKING) {
 
-			currentSection.getStockerLock().lock();
+			//currentSection.getStockerLock().lock();
 
 			Logging.logMessage(id,
 				"event=stock_begin section=" + position + " amount=" + currentStockTarget);
@@ -132,13 +132,17 @@ public class Stocker extends Worker {
 		}
 
 		if (inventoryContainsCategory(position)){
-			Box box = removeFromInventory(position);
-			currentSection.addBox(box);
-			readyTick = Ticker.getCurrentTick() + 1;
-			currentStocked++;
+			try {
+				Box box = removeFromInventory(position);
+				currentSection.addBox(box);
+				readyTick = Ticker.getCurrentTick() + 1;
+				currentStocked++;
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+			}
 		}
 		else {
-			currentSection.getStockerLock().unlock();
+			//currentSection.getStockerLock().unlock();
 			String nextPosition = peekInventoryCategory();
 			if (nextPosition == null) {
 				moveTo("staging");
@@ -154,6 +158,7 @@ public class Stocker extends Worker {
 		if (this.status == StockerStatus.STOCKING) {
 			Logging.logMessage(id, "event=stock_end section=" + this.position +
 				" stocked=" + currentStocked + " remaining_load=" + inventorySize);
+			sections.get(this.position).stockerDoneStocking();
 		}
 		String from = this.position;
 		int load = this.inventorySize;
