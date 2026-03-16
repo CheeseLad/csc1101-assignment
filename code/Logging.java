@@ -31,6 +31,14 @@ public class Logging {
         System.out.println("tick=" + tickStr + " tid=" + threadId + " event=" + event + " pick_id=" + pickId + " section=" + Section);
     }
 
+    public static void logPickerEventWait(String threadId, String event, int pickId, String Section, int waitedTicks) {
+        int tick = Ticker.getCurrentTick();
+        String tickStr = tick < 0 ? "?" : Integer.toString(tick);
+        String pickStr = pickId < 0 ? "?" : Integer.toString(pickId);
+
+        System.out.println("tick=" + tickStr + " tid=" + threadId + " event=" + event + " pick_id=" + pickId + " section=" + Section + " waited_ticks=" + waitedTicks);
+    }
+
     public static void logMessage(String threadId, String message) {
         int tick = Ticker.getCurrentTick();
         String tickStr = tick < 0 ? "?" : Integer.toString(tick);
