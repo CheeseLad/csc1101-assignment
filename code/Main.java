@@ -17,6 +17,8 @@ public class Main {
 		final int SECTION_CAPACITY = 100; // How many boxes can each section hold at once
 		final long SEED = 12345L; // Seed for replicable behaviour
 
+		final boolean VERBOSE = false; // Extra logging for debugging
+
 		// Adjust categories array to determine available sections
 		String[] categories = {"electronics", "books", "medicines", "clothes", "tools"};
 
@@ -26,7 +28,7 @@ public class Main {
 
 		// Generate sections from available categories
 		for (String category : categories) {
-			Section section = new Section(category, SECTION_CAPACITY);
+			Section section = new Section(category, SECTION_CAPACITY, VERBOSE);
 			sections.putIfAbsent(category, section);
 
 			// Per spec: You can assume each section of the warehouse begins with 5 boxes

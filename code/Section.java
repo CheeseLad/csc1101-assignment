@@ -7,15 +7,17 @@ public class Section {
 
 	private String category;
     private int capacity;
+    private boolean verbose;
 	private ConcurrentLinkedQueue<Box> boxes = new ConcurrentLinkedQueue<>();
 
     private final ReentrantLock sectionLock = new ReentrantLock(true);
     private final Condition notEmpty = sectionLock.newCondition();
     private final Condition notFull = sectionLock.newCondition();
 
-	public Section(String category, int capacity) {
+	public Section(String category, int capacity, boolean verbose) {
 		this.category = category;
 		this.capacity = capacity;
+		this.verbose = verbose;
 	}
 
 	public int getSize() {
@@ -53,16 +55,22 @@ public class Section {
         sectionLock.lock();
         try {
             while (boxes.size() >= capacity) {
-                System.out.println("Section " + category + " is full, waiting...");
+                if (verbose) {
+                    System.out.println("Section " + category + " is full, waiting...");
+                }
                 notFull.await();
             }
 
             if (box.getCategory().equals(category)) {
                 boxes.add(box);
-                System.out.println("Section " + category + " added a box. New size: " + boxes.size());
+                if (verbose) {
+                    System.out.println("Section " + category + " added a box. New size: " + boxes.size());
+                }
                 //notEmpty.signalAll();
             } else {
-                System.out.println("Box category does not match section category.");
+                if (verbose) {
+                    System.out.println("Box category does not match section category.");
+                }
             }
         } finally {
             sectionLock.unlock();
@@ -73,11 +81,15 @@ public class Section {
         sectionLock.lock();
         try {
             while (boxes.isEmpty()) {
-                System.out.println("Section " + category + " is empty, waiting...");
+                if (verbose) {
+                    System.out.println("Section " + category + " is empty, waiting...");
+                }
                 notEmpty.await();
             }
             Box box = boxes.poll();
-            System.out.println("Section " + category + " removed a box. New size: " + boxes.size());
+            if (verbose) {
+                System.out.println("Section " + category + " removed a box. New size: " + boxes.size());
+            }
             notFull.signalAll();
             return box;
         } finally {
