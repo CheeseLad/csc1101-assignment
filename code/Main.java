@@ -13,7 +13,7 @@ public class Main {
 		final int THREAD_COUNT = DELIVERERS_COUNT + STOCKERS_COUNT + PICKERS_COUNT;
 		final int TICK_DURATION = 50; // in milliseconds, how long a tick lasts
 		final int TOTAL_RUNTIME_TICKS = 1000; // in ticks, how many ticks the programme executes
-		final long SEED = 1232245L; // Seed for replicable behaviour
+		final long SEED = 12345L; // Seed for replicable behaviour
 
 		// Adjust categories array to determine available sections
 		String[] categories = {"electronics", "books", "medicines", "clothes", "tools"};
