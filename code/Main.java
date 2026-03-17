@@ -46,7 +46,7 @@ public class Main {
 			}
 		}
 
-		// Generate workers
+		// Generate workers, passing through config parameters as needed
 		for (int i = 0; i < DELIVERERS_COUNT; i++){
 			Deliverer newDeliverer = new Deliverer(categories, stagingArea, SEED, DELIVERY_SIZE, DELIVERY_PROBABILITY);
 			workers.add(newDeliverer);
@@ -58,7 +58,7 @@ public class Main {
 		}
 
 		for (int i = 0; i < PICKERS_COUNT; i++){
-			Picker newPicker = new Picker(sections, TOTAL_RUNTIME_TICKS, SEED, PICKER_PROBABILITY);
+			Picker newPicker = new Picker(sections, SEED, PICKER_PROBABILITY);
 			workers.add(newPicker);
 		}
 
@@ -77,6 +77,7 @@ public class Main {
 		int totalSectionBoxes = 0;
 		int leftoverInventory = 0;
 		int totalPickedBoxes = 0;
+
 		for (Worker worker : workers) {
 			if (worker instanceof Deliverer) {
 				totalDeliveries += ((Deliverer) worker).getTotalDeliveries();
@@ -88,6 +89,7 @@ public class Main {
 				totalPickedBoxes += ((Picker) worker).getTotalPickedBoxes();
 			}
 		}
+
 		System.out.println("Starting Stock: " + (categories.length * BEGINNING_BOXES_PER_SECTION));
 		System.out.println("Total Deliveries: " + totalDeliveries);
 		System.out.println("Staging Area: " + stagingArea.getSize());
