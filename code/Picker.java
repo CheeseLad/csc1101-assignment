@@ -24,6 +24,7 @@ public class Picker extends Worker {
 	private String nextMoveTarget = null;
   private Box currentBox;
   private static int totalRuntimeTicks;
+	private double PICKER_PROBABILITY;
 
 	// bookkeeping for current stocking session
 	private int currentPickTarget = 0;  // how many we intended to stock this trip
@@ -33,11 +34,12 @@ public class Picker extends Worker {
 
   private int totalPickedBoxes = 0; // For logging purposes, how many boxes we've picked in total
   
-  public Picker(HashMap<String, Section> sections, int totalRuntimeTicks, long seed) {
+  public Picker(HashMap<String, Section> sections, int totalRuntimeTicks, long seed, double pickerProbability) {
     this.sections = sections;
     this.id = "P" + nextId++;
     this.currentBox = null;
     this.totalRuntimeTicks = totalRuntimeTicks;
+    this.PICKER_PROBABILITY = pickerProbability;
     this.RNG = new Random(seed); // RNG for random section picking
   }
 
@@ -162,7 +164,7 @@ public class Picker extends Worker {
         break;
 		}*/
 
-		if (RNG.nextFloat() <= 0.1){ // Perform a pick every 10 ticks on average
+		if (RNG.nextFloat() <= PICKER_PROBABILITY){ // Perform a pick every 10 ticks on average
 			pick();			
 		}
 	}

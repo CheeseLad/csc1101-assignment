@@ -17,6 +17,11 @@ public class Main {
 		final int SECTION_CAPACITY = 100; // How many boxes can each section hold at once
 		final long SEED = 12345L; // Seed for replicable behaviour
 
+		// Probability Control
+
+		final double DELIVERY_PROBABILITY = 0.01; // Chance a deliverer attempts delivery each tick
+		final double PICKER_PROBABILITY = 0.1; // Chance a picker attempts to pick each tick
+
 		final boolean VERBOSE = false; // Extra logging for debugging
 
 		// Adjust categories array to determine available sections
@@ -43,7 +48,7 @@ public class Main {
 
 		// Generate workers
 		for (int i = 0; i < DELIVERERS_COUNT; i++){
-			Deliverer newDeliverer = new Deliverer(categories, stagingArea, SEED, DELIVERY_SIZE);
+			Deliverer newDeliverer = new Deliverer(categories, stagingArea, SEED, DELIVERY_SIZE, DELIVERY_PROBABILITY);
 			workers.add(newDeliverer);
 		}
 
@@ -53,7 +58,7 @@ public class Main {
 		}
 
 		for (int i = 0; i < PICKERS_COUNT; i++){
-			Picker newPicker = new Picker(sections, TOTAL_RUNTIME_TICKS, SEED);
+			Picker newPicker = new Picker(sections, TOTAL_RUNTIME_TICKS, SEED, PICKER_PROBABILITY);
 			workers.add(newPicker);
 		}
 
