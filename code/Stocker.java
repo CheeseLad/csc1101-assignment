@@ -122,7 +122,6 @@ public class Stocker extends Worker {
 		Section currentSection = sections.get(position);
 
 		if (status != StockerStatus.STOCKING) {
-
 			currentSection.getStockerLock().lock();
 
 			Logging.logMessage(id,
@@ -138,6 +137,8 @@ public class Stocker extends Worker {
 			currentStocked++;
 		}
 		else {
+			Logging.logMessage(id, "event=stock_end section=" + position +
+				" stocked=" + currentStocked + " remaining_load=" + inventorySize);
 			currentSection.getStockerLock().unlock();
 			String nextPosition = peekInventoryCategory();
 			if (nextPosition == null) {
@@ -149,22 +150,15 @@ public class Stocker extends Worker {
 		}
 	}
 
-	public void moveTo(String position){
-		// if we were in the middle of stocking, emit end event before leaving
-		if (this.status == StockerStatus.STOCKING) {
-			Logging.logMessage(id, "event=stock_end section=" + this.position +
-				" stocked=" + currentStocked + " remaining_load=" + inventorySize);
-		}
-		String from = this.position;
-		int load = this.inventorySize;
-		Logging.logMessage(id, "event=move from=" + from + " to=" + position + " load=" + load);
+	public void moveTo(String newPosition){
+		Logging.logMessage(id, "event=move from=" + position + " to=" + newPosition + " load=" + inventorySize);
 		// when heading to a new section (not staging) set up stock counters
-		if (!position.equals("staging")){
-			currentStockTarget = inventory.containsKey(position) ? this.inventory.get(position).size() : 0;
+		if (!newPosition.equals("staging")){
+			currentStockTarget = inventory.containsKey(newPosition) ? this.inventory.get(newPosition).size() : 0;
 			currentStocked = 0;
 		}
 		this.status = StockerStatus.MOVING;
-		this.position = position;
+		this.position = newPosition;
 		readyTick = Ticker.getCurrentTick() + 10 + inventorySize;
 	}
 
