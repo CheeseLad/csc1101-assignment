@@ -12,16 +12,18 @@ public class Picker extends Worker {
 	private int readyTick = 0;
 	private HashMap<String, Section> sections;
 	private double PICKER_PROBABILITY;
+  private Trolley trolley;
 
 	private static Random RNG = null;
 
   private int totalPickedBoxes = 0;
   
-  public Picker(HashMap<String, Section> sections, long seed, double pickerProbability) {
+  public Picker(HashMap<String, Section> sections, long seed, double pickerProbability, Trolley trolley) {
     this.sections = sections;
     this.id = "P" + nextId++;
     this.PICKER_PROBABILITY = pickerProbability;
     this.RNG = new Random(seed); // RNG for random section picking
+    this.trolley = trolley;
   }
 
 	// Needs to be synchronized to ensure the pick id's increment properly across threads
@@ -47,14 +49,19 @@ public class Picker extends Worker {
 
       int currentSectionSize = section.getSize();
 
-      Logging.logPickerEvent(this.id, "pick_start", newPickId, section.getCategory());
+      int trolleyId = trolley.acquireTrolley();
+      Logging.logTrolleyEventWait(this.id, "acquire_trolley", trolleyId, Ticker.getCurrentTick() - waitedTicks);
+
+      Logging.logPickerEvent(this.id, "pick_start", newPickId, section.getCategory(), trolleyId);
 
 			Box box = section.removeBox();
       totalPickedBoxes++;
-
-      Logging.logPickerEventWait(this.id, "pick_done", newPickId, section.getCategory(), Ticker.getCurrentTick() - waitedTicks);
-    
       readyTick = Ticker.getCurrentTick() + 1;
+
+      Logging.logPickerEventWait(this.id, "pick_done", newPickId, section.getCategory(), Ticker.getCurrentTick() - waitedTicks, trolleyId);
+
+      trolley.releaseTrolley();
+      Logging.logTrolleyEventWait(this.id, "release_trolley", trolleyId, Ticker.getCurrentTick() - waitedTicks);
 
       return;
     } catch (InterruptedException e) {
@@ -70,6 +77,10 @@ public class Picker extends Worker {
 	public void advance(){
 
 		int tick = Ticker.getCurrentTick();
+
+    if (tick < readyTick){
+			return;
+		}
 
 		if (RNG.nextFloat() <= PICKER_PROBABILITY) { // Perform a pick every 10 ticks on average
 			pick();			
