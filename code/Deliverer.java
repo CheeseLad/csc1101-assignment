@@ -2,19 +2,22 @@ import java.util.Random;
 import java.util.ArrayList;
 
 public class Deliverer extends Worker {
-	private static final int DELIVERY_SIZE = 10; // How many boxes per delivery?
-	private static final long SEED = 12345L; // Seed for replicatable behaviour
-	private static final Random RNG = new Random(SEED); // RNG for box categories per delivery
+	private static int DELIVERY_SIZE;
+	private static double DELIVERY_PROBABILITY;
+	private static Random RNG = null;
 	private String[] categories;
 	private StagingArea stagingArea;
 	private static int nextId = 1;
 	private final String id;
 	private static int totalDeliveries = 0;
 
-  	public Deliverer(String[] categories, StagingArea stagingArea) {
+  	public Deliverer(String[] categories, StagingArea stagingArea, long seed, int deliverySize, double deliveryProbability) {
 		this.categories = categories;
 		this.stagingArea = stagingArea;
 		this.id = "D" + nextId++;
+		this.RNG = new Random(seed); // RNG for box categories per delivery
+		this.DELIVERY_SIZE = deliverySize;
+		this.DELIVERY_PROBABILITY = deliveryProbability;
 	}
 
 	public String getId() {
@@ -47,7 +50,7 @@ public class Deliverer extends Worker {
 	}
 
   	public void advance(){
-		if (RNG.nextFloat() <= 0.01){ // Peform a delivery every 100 ticks on average
+		if (RNG.nextFloat() <= DELIVERY_PROBABILITY){ // Peform a delivery every 100 ticks on average
 			// Ticker.logMessage(id, "staging_stock=" + stagingArea.getSize());
 			deliver();			
 		}

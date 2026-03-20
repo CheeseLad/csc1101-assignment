@@ -123,7 +123,7 @@ public class Ticker {
         }
 
         if (totalTicksElapsed >= totalRuntimeLength){
-            System.out.println("Programme complete.");
+            Logging.logMessage("MAIN","ending simulation");
             stop();
         }
     }

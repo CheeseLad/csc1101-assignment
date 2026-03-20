@@ -23,6 +23,38 @@ public class Logging {
         }
     }
 
+    public static void logPickerEvent(String threadId, String event, int pickId, String section, int trolleyId) {
+        int tick = Ticker.getCurrentTick();
+        String tickStr = tick < 0 ? "?" : Integer.toString(tick);
+        String pickStr = pickId < 0 ? "?" : Integer.toString(pickId);
+
+        System.out.println("tick=" + tickStr + " tid=" + threadId + " event=" + event + " pick_id=" + pickId + " section=" + section + " trolley_id=" + trolleyId);
+    }
+
+    public static void logPickerEventWait(String threadId, String event, int pickId, String section, int waitedTicks, int trolleyId) {
+        int tick = Ticker.getCurrentTick();
+        String tickStr = tick < 0 ? "?" : Integer.toString(tick);
+        String pickStr = pickId < 0 ? "?" : Integer.toString(pickId);
+
+        System.out.println("tick=" + tickStr + " tid=" + threadId + " event=" + event + " pick_id=" + pickId + " section=" + section + " waited_ticks=" + waitedTicks + " trolley_id=" + trolleyId);
+    }
+
+    public static void logTrolleyEvent(String threadId, String event, int trolleyId) {
+        int tick = Ticker.getCurrentTick();
+        String tickStr = tick < 0 ? "?" : Integer.toString(tick);
+        String trolleyStr = trolleyId < 0 ? "?" : Integer.toString(trolleyId);
+
+        System.out.println("tick=" + tickStr + " tid=" + threadId + " event=" + event + " trolley_id=" + trolleyId);
+    }
+
+    public static void logTrolleyEventWait(String threadId, String event, int trolleyId, int waitedTicks) {
+        int tick = Ticker.getCurrentTick();
+        String tickStr = tick < 0 ? "?" : Integer.toString(tick);
+        String trolleyStr = trolleyId < 0 ? "?" : Integer.toString(trolleyId);
+
+        System.out.println("tick=" + tickStr + " tid=" + threadId + " event=" + event + " trolley_id=" + trolleyId + " waited_ticks=" + waitedTicks);
+    }
+
     public static void logMessage(String threadId, String message) {
         int tick = Ticker.getCurrentTick();
         String tickStr = tick < 0 ? "?" : Integer.toString(tick);

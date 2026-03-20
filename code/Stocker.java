@@ -122,7 +122,8 @@ public class Stocker extends Worker {
 		Section currentSection = sections.get(position);
 
 		if (status != StockerStatus.STOCKING) {
-			currentSection.getStockerLock().lock();
+
+			//currentSection.getStockerLock().lock();
 
 			Logging.logMessage(id,
 				"event=stock_begin section=" + position + " amount=" + currentStockTarget);
@@ -131,16 +132,23 @@ public class Stocker extends Worker {
 		}
 
 		if (inventoryContainsCategory(position)){
-			Box box = removeFromInventory(position);
-			currentSection.addBox(box);
-			readyTick = Ticker.getCurrentTick() + 1;
-			currentStocked++;
+			try {
+				Box box = removeFromInventory(position);
+				currentSection.addBox(box);
+				readyTick = Ticker.getCurrentTick() + 1;
+				currentStocked++;
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+			}
 		}
 		else {
+			//currentSection.getStockerLock().unlock();
 			Logging.logMessage(id, "event=stock_end section=" + position +
 				" stocked=" + currentStocked + " remaining_load=" + inventorySize);
-			currentSection.getStockerLock().unlock();
+			
+			sections.get(position).stockerDoneStocking();
 			String nextPosition = peekInventoryCategory();
+
 			if (nextPosition == null) {
 				moveTo("staging");
 			}
@@ -152,9 +160,10 @@ public class Stocker extends Worker {
 
 	public void moveTo(String newPosition){
 		Logging.logMessage(id, "event=move from=" + position + " to=" + newPosition + " load=" + inventorySize);
+
 		// when heading to a new section (not staging) set up stock counters
 		if (!newPosition.equals("staging")){
-			currentStockTarget = inventory.containsKey(newPosition) ? this.inventory.get(newPosition).size() : 0;
+			currentStockTarget = inventory.containsKey(newPosition) ? inventory.get(newPosition).size() : 0;
 			currentStocked = 0;
 		}
 		this.status = StockerStatus.MOVING;
