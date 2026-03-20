@@ -3,33 +3,56 @@
 // import java.util.Random;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.util.Properties;
 
 public class Main {
 	public static void main(String[] args) {
-		final int DELIVERERS_COUNT = 1;
-		final int DELIVERY_SIZE = 10; // How many boxes per delivery?
-		final int STOCKERS_COUNT = 3;
-		final int PICKERS_COUNT = 3;
+		// Source: https://www.browserstack.com/guide/config-file-in-java
+		Properties config = new Properties();
+		try (FileInputStream input = new FileInputStream("config.properties")) {
+			config.load(input);
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		
+		final int DELIVERERS_COUNT = Integer.parseInt(config.getProperty("DELIVERERS_COUNT"));
+		final int DELIVERY_SIZE = Integer.parseInt(config.getProperty("DELIVERY_SIZE")); // How many boxes per delivery?
+		final int STOCKERS_COUNT = Integer.parseInt(config.getProperty("STOCKERS_COUNT"));
+		final int PICKERS_COUNT = Integer.parseInt(config.getProperty("PICKERS_COUNT"));
 		final int THREAD_COUNT = DELIVERERS_COUNT + STOCKERS_COUNT + PICKERS_COUNT;
-		final int TICK_DURATION = 50; // in milliseconds, how long a tick lasts
-		final int TOTAL_RUNTIME_TICKS = 1000; // in ticks, how many ticks the programme executes
-		final int BEGINNING_BOXES_PER_SECTION = 5; // How many boxes each section starts with
-		final int SECTION_CAPACITY = 100; // How many boxes can each section hold at once
-		final long SEED = 12345L; // Seed for replicable behaviour
+		final int TICK_TIME_SIZE = Integer.parseInt(config.getProperty("TICK_TIME_SIZE")); // in milliseconds, how long a tick lasts
+		final int TOTAL_RUNTIME_TICKS = Integer.parseInt(config.getProperty("TOTAL_RUNTIME_TICKS")); // in ticks, how many ticks the programme executes
+		final int BEGINNING_BOXES_PER_SECTION = Integer.parseInt(config.getProperty("BEGINNING_BOXES_PER_SECTION")); // How many boxes each section starts with
+		final int SECTION_CAPACITY = Integer.parseInt(config.getProperty("SECTION_CAPACITY")); // How many boxes can each section hold at once
+		final long SEED = Long.parseLong(config.getProperty("SEED")); // Seed for replicable behaviour
 
 		// Probability Control
 
-		final double DELIVERY_PROBABILITY = 0.01; // Chance a deliverer attempts delivery each tick
-		final double PICKER_PROBABILITY = 0.1; // Chance a picker attempts to pick each tick
+		final double DELIVERY_PROBABILITY = Double.parseDouble(config.getProperty("DELIVERY_PROBABILITY")); // Chance a deliverer attempts delivery each tick
+		final double PICKER_PROBABILITY = Double.parseDouble(config.getProperty("PICKER_PROBABILITY")); // Chance a picker attempts to pick each tick
 
-		final boolean VERBOSE = false; // Extra logging for debugging
+		final boolean VERBOSE = Boolean.parseBoolean(config.getProperty("VERBOSE")); // Extra logging for debugging
+
+		String stringK = config.getProperty("K");
+		int K;
+
+		if (stringK == null || stringK.equals("")) {
+			// Default K value if not provided in config
+			K = (int) Math.floor((STOCKERS_COUNT + PICKERS_COUNT) / 2.0);
+		} else {
+			K = Integer.parseInt(stringK);
+		}
 
 		// Adjust categories array to determine available sections
-		String[] categories = {"electronics", "books", "medicines", "clothes", "tools"};
+		String categoriesString = config.getProperty("CATEGORIES");
+		String[] categories = categoriesString.split(",");
 
 		ArrayList<Worker> workers = new ArrayList<>(); // All Deliverers, Stockers and Pickers
 		StagingArea stagingArea = new StagingArea(); // Assuming single staging area
 		HashMap<String, Section> sections = new HashMap<>(); // category -> section object
+		Trolley trolley = new Trolley(K); // Assuming single pool of trollies
 
 		// Generate sections from available categories
 		for (String category : categories) {
@@ -58,12 +81,12 @@ public class Main {
 		}
 
 		for (int i = 0; i < PICKERS_COUNT; i++){
-			Picker newPicker = new Picker(sections, SEED, PICKER_PROBABILITY);
+			Picker newPicker = new Picker(sections, SEED, PICKER_PROBABILITY, trolley);
 			workers.add(newPicker);
 		}
 
 		// Generate & start ticker
-		Ticker.initialise(TICK_DURATION, TOTAL_RUNTIME_TICKS, workers, THREAD_COUNT);
+		Ticker.initialise(TICK_TIME_SIZE, TOTAL_RUNTIME_TICKS, workers, THREAD_COUNT);
 		Logging.logMessage("MAIN","starting simulation");
 		Ticker.getInstance().start();
 
