@@ -5,7 +5,10 @@ import java.util.Random;
 import java.util.HashMap;
 import java.util.List;
 
+enum PickerStatus {MOVING, PICKING, WAITING}
+
 public class Picker extends Worker {
+  private PickerStatus status = PickerStatus.WAITING;
 	private final String id;
 	private static int nextId = 1;
   private static int pickId = 1;
@@ -15,6 +18,10 @@ public class Picker extends Worker {
   private TrolleyPool trolleyPool;
   private Trolley trolley = null;
   private int trolleyWaitStartTick = -1;
+
+  private int newPickId;
+  private String category;
+  private int waitedTicks;
 
 	private Random RNG = null;
 
@@ -38,11 +45,12 @@ public class Picker extends Worker {
   }
 
   // BEHAVIOUR HANDLING
-	public void pick() {
+	public void pickStart() {
     try {
 
+      status = PickerStatus.PICKING;
       int newPickId = nextPickId();
-			int waitedTicks = Ticker.getCurrentTick();
+
 
       // REPLACE LATER
       List<Section> sectionList = new ArrayList<>(sections.values());
@@ -64,13 +72,28 @@ public class Picker extends Worker {
         trolleyWaitStartTick = -1;
       }
 
-      Logging.logPickerEvent(this.id, "pick_start", newPickId, section.getCategory(), trolley.getId());
+      this.newPickId = newPickId;
+			int waitedTicks = Ticker.getCurrentTick();
+      this.waitedTicks = waitedTicks;
+      String category = section.getCategory();
+      this.category = category;
+      Logging.logPickerEvent(this.id, "pick_start", newPickId, category, trolley.getId());
 
 			section.removeBox();
       totalPickedBoxes++;
-      readyTick = Ticker.getCurrentTick() + 1;
+     
+      return;
+    } catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+		}
+	}
 
-      Logging.logPickerEvent(this.id, "pick_done", newPickId, section.getCategory(), Ticker.getCurrentTick() - waitedTicks, trolley.getId());
+  public void pickDone() {
+      readyTick = Ticker.getCurrentTick() + 1;
+      status = PickerStatus.WAITING;
+
+      // - 1 to log the time the picker had to wait, not how long the pick took
+      Logging.logPickerEvent(this.id, "pick_done", newPickId, category, Ticker.getCurrentTick() - waitedTicks -1, trolley.getId());
 
       if (trolley != null){
         trolleyPool.releaseTrolley(this, trolley);
@@ -79,9 +102,6 @@ public class Picker extends Worker {
       }
 
       return;
-    } catch (InterruptedException e) {
-			Thread.currentThread().interrupt();
-		}
 	}
 
   public int getTotalPickedBoxes() {
@@ -97,8 +117,18 @@ public class Picker extends Worker {
 			return;
 		}
 
-		if (RNG.nextFloat() <= PICKER_PROBABILITY) { // Perform a pick every 10 ticks on average
-			pick();			
+    switch(status){
+
+			case WAITING:
+				if (RNG.nextFloat() <= PICKER_PROBABILITY) { // Perform a pick every 10 ticks on average
+          pickStart();			
+        }
+				break;
+
+      case PICKING:
+        pickDone();
+        break;
+
 		}
 	}
 }
