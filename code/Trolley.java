@@ -1,21 +1,11 @@
-import java.util.concurrent.Semaphore;
-
 public class Trolley {
+    private final int id;
 
-  int K;
-  final Semaphore availableTrollies;
+    public Trolley(int id) {
+        this.id = id;
+    }
 
-	public Trolley(int K) {
-    this.K = K;
-    this.availableTrollies = new Semaphore(K);
-	}
-
-  public int acquireTrolley() throws InterruptedException {
-      availableTrollies.acquire();
-      return availableTrollies.availablePermits();
-  }
-
-  public void releaseTrolley() throws InterruptedException {
-      availableTrollies.release();
-  }
+    public int getId() {
+        return id;
+    }
 }

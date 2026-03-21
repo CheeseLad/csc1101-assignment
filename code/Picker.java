@@ -1,7 +1,7 @@
 import java.util.ArrayList;
 import java.util.Random;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedQueue;
+// import java.util.concurrent.ConcurrentHashMap;
+// import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.HashMap;
 import java.util.List;
 
@@ -12,18 +12,20 @@ public class Picker extends Worker {
 	private int readyTick = 0;
 	private HashMap<String, Section> sections;
 	private double PICKER_PROBABILITY;
-  private Trolley trolley;
+  private TrolleyPool trolleyPool;
+  private Trolley trolley = null;
+  private int trolleyWaitStartTick = -1;
 
-	private static Random RNG = null;
+	private Random RNG = null;
 
   private int totalPickedBoxes = 0;
   
-  public Picker(HashMap<String, Section> sections, long seed, double pickerProbability, Trolley trolley) {
+  public Picker(HashMap<String, Section> sections, long seed, double pickerProbability, TrolleyPool trolleyPool) {
     this.sections = sections;
     this.id = "P" + nextId++;
     this.PICKER_PROBABILITY = pickerProbability;
     this.RNG = new Random(seed); // RNG for random section picking
-    this.trolley = trolley;
+    this.trolleyPool = trolleyPool;
   }
 
 	// Needs to be synchronized to ensure the pick id's increment properly across threads
@@ -47,21 +49,34 @@ public class Picker extends Worker {
       Section section = sectionList.get(RNG.nextInt(sectionList.size()));
       // REPLACE LATER
 
-      int currentSectionSize = section.getSize();
+      // int currentSectionSize = section.getSize();
 
-      int trolleyId = trolley.acquireTrolley();
-      Logging.logTrolleyEventWait(this.id, "acquire_trolley", trolleyId, Ticker.getCurrentTick() - waitedTicks);
+      if (trolley == null){
+        if (trolleyWaitStartTick == -1) {
+          trolleyWaitStartTick = Ticker.getCurrentTick();
+        }
 
-      Logging.logPickerEvent(this.id, "pick_start", newPickId, section.getCategory(), trolleyId);
+        trolley = trolleyPool.tryAcquireTrolley(this);
+        if (trolley == null) return;
 
-			Box box = section.removeBox();
+        int waited = Ticker.getCurrentTick() - trolleyWaitStartTick;
+        Logging.logTrolleyEvent(this.id, "acquire_trolley", trolley.getId(), waited);
+        trolleyWaitStartTick = -1;
+      }
+
+      Logging.logPickerEvent(this.id, "pick_start", newPickId, section.getCategory(), trolley.getId());
+
+			section.removeBox();
       totalPickedBoxes++;
       readyTick = Ticker.getCurrentTick() + 1;
 
-      Logging.logPickerEventWait(this.id, "pick_done", newPickId, section.getCategory(), Ticker.getCurrentTick() - waitedTicks, trolleyId);
+      Logging.logPickerEvent(this.id, "pick_done", newPickId, section.getCategory(), Ticker.getCurrentTick() - waitedTicks, trolley.getId());
 
-      trolley.releaseTrolley();
-      Logging.logTrolleyEventWait(this.id, "release_trolley", trolleyId, Ticker.getCurrentTick() - waitedTicks);
+      if (trolley != null){
+        trolleyPool.releaseTrolley(this, trolley);
+        Logging.logTrolleyEvent(this.id, "release_trolley", trolley.getId());
+        trolley = null;
+      }
 
       return;
     } catch (InterruptedException e) {

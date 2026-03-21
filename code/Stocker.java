@@ -6,6 +6,7 @@ import java.util.ArrayList;
 enum StockerStatus {MOVING, TAKING, STOCKING, WAITING}
 
 public class Stocker extends Worker {
+	
 	private static final int INVENTORY_LIMIT = 10;
 
 	private final String id;
@@ -19,14 +20,19 @@ public class Stocker extends Worker {
 	private HashMap<String, Section> sections;
 	private String nextMoveTarget = null;
 
-	// bookkeeping for current stocking session
+	// Trolley trackers
+	private TrolleyPool trolleyPool;
+	private Trolley trolley = null;
+	private int trolleyWaitStartTick = -1;
+
+	// track current stocking session values for logs
 	private int currentStockTarget = 0;  // how many we intended to stock this trip
 	private int currentStocked = 0;      // how many we've already moved
 
-
-	public Stocker(StagingArea stagingArea, HashMap<String, Section> sections) {
+	public Stocker(StagingArea stagingArea, HashMap<String, Section> sections, TrolleyPool trolleyPool) {
 		this.stagingArea = stagingArea;
 		this.sections = sections;
+		this.trolleyPool = trolleyPool;
 		this.id = "S" + nextId++;
 	}
 
@@ -85,15 +91,30 @@ public class Stocker extends Worker {
 	// BEHAVIOUR HANDLING
 	public void take() {
 		try {
-			if (status != StockerStatus.TAKING) { // Not yet taking, try to acquire lock
+			if (status != StockerStatus.TAKING){ // Not yet taking, try to acquire lock
 				stagingArea.acquireForStocker();
 				status = StockerStatus.TAKING;
 			}
 
+			// Check if there are boxes to take
 			if (stagingArea.isEmpty()) { // Cannot take anything, wait instead
 				stagingArea.releaseForStocker();
 				status = StockerStatus.WAITING;
 				return;
+			}
+
+			// Before taking, acquire a trolley
+			if (trolley == null){
+				if (trolleyWaitStartTick == -1) {
+					trolleyWaitStartTick = Ticker.getCurrentTick();
+				}
+
+				trolley = trolleyPool.tryAcquireTrolley(this);
+				if (trolley == null) return;
+
+				int waited = Ticker.getCurrentTick() - trolleyWaitStartTick;
+				Logging.logTrolleyEvent(this.id, "acquire_trolley", trolley.getId(), waited);
+				trolleyWaitStartTick = -1;
 			}
 
 			// Fill up inventory as much as possible
@@ -104,7 +125,7 @@ public class Stocker extends Worker {
 				addToInventory(box);
 			}
 
-			Logging.logEventWithBoxes(id,"stocker_load",getInventoryItems(),true);
+			Logging.logEventWithBoxes(id,"stocker_load",getInventoryItems(),true, trolley.getId());
 
 			stagingArea.releaseForStocker(); // Taking complete, release lock
 
@@ -122,11 +143,9 @@ public class Stocker extends Worker {
 		Section currentSection = sections.get(position);
 
 		if (status != StockerStatus.STOCKING) {
-
-			//currentSection.getStockerLock().lock();
-
+			// currentSection.getStockerLock().lock();
 			Logging.logMessage(id,
-				"event=stock_begin section=" + position + " amount=" + currentStockTarget);
+				"event=stock_begin section=" + position + " amount=" + currentStockTarget + " trolley_id=" + trolley.getId());
 
 			status = StockerStatus.STOCKING;
 		}
@@ -142,14 +161,21 @@ public class Stocker extends Worker {
 			}
 		}
 		else {
-			//currentSection.getStockerLock().unlock();
+			// currentSection.getStockerLock().unlock();
 			Logging.logMessage(id, "event=stock_end section=" + position +
-				" stocked=" + currentStocked + " remaining_load=" + inventorySize);
+				" stocked=" + currentStocked + " remaining_load=" + inventorySize + " trolley_id=" + trolley.getId());
 			
 			sections.get(position).stockerDoneStocking();
 			String nextPosition = peekInventoryCategory();
 
 			if (nextPosition == null) {
+				// Inventory is empty and returning to staging area, release trolley
+				if (trolley != null){
+					trolleyPool.releaseTrolley(this, trolley);
+					Logging.logTrolleyEvent(this.id, "release_trolley", trolley.getId());
+					trolley = null;
+				}
+
 				moveTo("staging");
 			}
 			else {
@@ -159,7 +185,7 @@ public class Stocker extends Worker {
 	}
 
 	public void moveTo(String newPosition){
-		Logging.logMessage(id, "event=move from=" + position + " to=" + newPosition + " load=" + inventorySize);
+		Logging.logMessage(id, "event=move from=" + position + " to=" + newPosition + " load=" + inventorySize + " trolley_id=" + trolley.getId());
 
 		// when heading to a new section (not staging) set up stock counters
 		if (!newPosition.equals("staging")){
