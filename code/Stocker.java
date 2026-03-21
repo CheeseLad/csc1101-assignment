@@ -70,21 +70,26 @@ public class Stocker extends Worker {
 		return inventory.containsKey(category) && !inventory.get(category).isEmpty();
 	}
 
-	private String peekInventoryCategory(){
-		// Gets the next category with the highest quantity of boxes (semi-randomisation + optimal to reduce travel costs)
+	private ArrayList<String> getInventoryCategoryPriorities(){
+		// Gets the next category with the lowest stock of boxes //
 		
-		String chosenCategory = null;
-		int maxCount = 0;
-		
-		for (String category: inventory.keySet()){
-			ConcurrentLinkedQueue<Box> queue = inventory.get(category);
-			int size = queue.size();
-			if (size > maxCount){
-				maxCount = size;
-				chosenCategory = category;
+		ArrayList<String> categories = new ArrayList<>();
+
+		// Collect valid categories (present in inventory)
+		for (String category : inventory.keySet()) {
+			if (!inventory.get(category).isEmpty()) {
+				categories.add(category);
 			}
 		}
-		return chosenCategory;
+
+		// Sort by section stock (ascending)
+		categories.sort((a, b) -> {
+			int sizeA = sections.get(a).getSize();
+			int sizeB = sections.get(b).getSize();
+			return Integer.compare(sizeA, sizeB);
+		});
+
+		return categories;
 	}
 
 
@@ -129,7 +134,8 @@ public class Stocker extends Worker {
 
 			stagingArea.releaseForStocker(); // Taking complete, release lock
 
-			nextMoveTarget = peekInventoryCategory(); // Save where to move (so we can move there on next tick)
+			ArrayList<String> priorityCategories = getInventoryCategoryPriorities(); // Save where to move (so we can move there on next tick)
+			nextMoveTarget = priorityCategories.isEmpty() ? null : priorityCategories.get(0);
 
 			readyTick = Ticker.getCurrentTick() + 1;
 			status = StockerStatus.MOVING;
@@ -151,14 +157,39 @@ public class Stocker extends Worker {
 		}
 
 		if (inventoryContainsCategory(position)){
-			try {
-				Box box = removeFromInventory(position);
-				currentSection.addBox(box);
+			
+			Box box = removeFromInventory(position);
+			boolean success = currentSection.tryAddBox(box);
+
+			if (success){
+				sections.get(position).stockerDoneStocking();
 				readyTick = Ticker.getCurrentTick() + 1;
 				currentStocked++;
-			} catch (InterruptedException e) {
-				Thread.currentThread().interrupt();
+				return;
 			}
+
+			addToInventory(box); // Failed to stock box, give it back
+
+			ArrayList<String> priorityList = getInventoryCategoryPriorities();
+
+			for (String category: priorityList) {
+				if (!category.equals(position)){
+					moveTo(category);
+					return;
+				}
+			}
+
+			// No viable section, end stocking
+			Logging.logMessage(id, "event=stock_end section=" + position +
+				" stocked=" + currentStocked + " remaining_load=" + inventorySize + " trolley_id=" + trolley.getId());
+
+			if (trolley != null){
+				trolleyPool.releaseTrolley(this, trolley);
+				Logging.logTrolleyEvent(this.id, "release_trolley", trolley.getId());
+				trolley = null;
+			}
+
+			moveTo("staging");
 		}
 		else {
 			// currentSection.getStockerLock().unlock();
@@ -166,7 +197,9 @@ public class Stocker extends Worker {
 				" stocked=" + currentStocked + " remaining_load=" + inventorySize + " trolley_id=" + trolley.getId());
 			
 			sections.get(position).stockerDoneStocking();
-			String nextPosition = peekInventoryCategory();
+			
+			ArrayList<String> priorityList = getInventoryCategoryPriorities();
+    		String nextPosition = priorityList.isEmpty() ? null : priorityList.get(0);
 
 			if (nextPosition == null) {
 				// Inventory is empty and returning to staging area, release trolley
@@ -185,7 +218,10 @@ public class Stocker extends Worker {
 	}
 
 	public void moveTo(String newPosition){
-		Logging.logMessage(id, "event=move from=" + position + " to=" + newPosition + " load=" + inventorySize + " trolley_id=" + trolley.getId());
+		if (trolley != null)
+			Logging.logMessage(id, "event=move from=" + position + " to=" + newPosition + " load=" + inventorySize + " trolley_id=" + trolley.getId());
+		else
+			Logging.logMessage(id, "event=move from=" + position + " to=" + newPosition + " load=" + inventorySize);
 
 		// when heading to a new section (not staging) set up stock counters
 		if (!newPosition.equals("staging")){

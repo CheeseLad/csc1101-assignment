@@ -70,7 +70,7 @@ public class Picker extends Worker {
       totalPickedBoxes++;
       readyTick = Ticker.getCurrentTick() + 1;
 
-      Logging.logPickerEvent(this.id, "pick_done", newPickId, section.getCategory(), Ticker.getCurrentTick() - waitedTicks, trolley.getId());
+      Logging.logPickerEvent(this.id, "pick_done", newPickId, section.getCategory(), Ticker.getCurrentTick() - waitedTicks, section.getSize(), trolley.getId());
 
       if (trolley != null){
         trolleyPool.releaseTrolley(this, trolley);

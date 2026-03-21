@@ -40,7 +40,7 @@ public class TrolleyPool {
         
         if (isStocker) 
             stockersWithTrolleys++;
-        else if (isStocker) 
+        else if (isPicker) 
             pickersWithTrolleys++;
 
         return trolley;
