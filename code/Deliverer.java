@@ -2,22 +2,26 @@ import java.util.Random;
 import java.util.ArrayList;
 
 public class Deliverer extends Worker {
-	private static int DELIVERY_SIZE;
-	private static double DELIVERY_PROBABILITY;
-	private static Random RNG = null;
+	private static int nextId = 1;
+	private static int totalDeliveries = 0;
+	
+	private int deliverySize;
+	private double deliveryProbability;
+	private Random RNG = null;
 	private String[] categories;
 	private StagingArea stagingArea;
-	private static int nextId = 1;
 	private final String id;
-	private static int totalDeliveries = 0;
 
   	public Deliverer(String[] categories, StagingArea stagingArea, long seed, int deliverySize, double deliveryProbability) {
 		this.categories = categories;
 		this.stagingArea = stagingArea;
 		this.id = "D" + nextId++;
-		this.RNG = new Random(seed); // RNG for box categories per delivery
-		this.DELIVERY_SIZE = deliverySize;
-		this.DELIVERY_PROBABILITY = deliveryProbability;
+		this.deliverySize = deliverySize;
+		this.deliveryProbability = deliveryProbability;
+		if (seed != 0)
+			this.RNG = new Random(seed);
+		else
+			this.RNG = new Random(seed);
 	}
 
 	public String getId() {
@@ -33,7 +37,7 @@ public class Deliverer extends Worker {
 		ArrayList<Box> delivered = new ArrayList<>();
 		stagingArea.getLock().lock(); // Ensure atomic delivery of 10 boxes at once (despite thread-safe queue)
 		try {
-			for (int i = 0; i < DELIVERY_SIZE; i++){
+			for (int i = 0; i < deliverySize; i++){
 				int randomIndex = RNG.nextInt(amountOfChoices);
 				Box newBox = new Box(categories[randomIndex]);
 				stagingArea.addBox(newBox);
@@ -50,7 +54,7 @@ public class Deliverer extends Worker {
 	}
 
   	public void advance(){
-		if (RNG.nextFloat() <= DELIVERY_PROBABILITY){ // Peform a delivery every 100 ticks on average
+		if (RNG.nextFloat() <= deliveryProbability){ // Peform a delivery every 100 ticks on average
 			// Ticker.logMessage(id, "staging_stock=" + stagingArea.getSize());
 			deliver();			
 		}
