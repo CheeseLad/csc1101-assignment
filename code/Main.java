@@ -92,7 +92,7 @@ public class Main {
 		}
 
 		for (int i = 0; i < STOCKERS_COUNT; i++){
-			Stocker newStocker = new Stocker(stagingArea, sections, trolleyPool);
+			Stocker newStocker = new Stocker(stagingArea, sections, trolleyPool, SEED);
 			workers.add(newStocker);
 		}
 
@@ -114,7 +114,10 @@ public class Main {
 
 		// POST-SIMULATION SUMMARY
 
-		System.out.println("\n--- FINAL WAREHOUSE STATE ---");
+		Logging.logMessage("MAIN","ending simulation");
+		System.out.println();
+		System.out.println("--- FINAL WAREHOUSE STATE ---");
+		System.out.println();
 
 		int totalDeliveries = 0;
 		int totalSectionBoxes = 0;
@@ -133,21 +136,26 @@ public class Main {
 			}
 		}
 
+		System.out.println("Ending on day (starting from 0): " + Ticker.getCurrentDay());
+		System.out.println("Total ticks: " + Ticker.getCurrentTick());
 		System.out.println("Starting Stock: " + (CATEGORIES.length * INITIAL_SECTION_SIZES));
+		System.out.println();
 		System.out.println("Total Deliveries: " + totalDeliveries);
-		System.out.println("Staging Area: " + stagingArea.getSize());
-
+		System.out.println("Final Staging Area Size: " + stagingArea.getSize());
+		System.out.println();
+		System.out.println("Final Section Sizes:");
 		for (String category : CATEGORIES) {
 			int size = sections.get(category).getSize();
 			totalSectionBoxes += size;
 			System.out.println(category + ": " + size);
 		}
-
-		System.out.println("Stockers Combined Inventories: " + leftoverInventory);
-
-		System.out.println("Total Processed (Stocked/Picked) Boxes: " + (totalSectionBoxes + totalPickedBoxes + leftoverInventory + stagingArea.getSize()));
-		System.out.println("Total Picked Boxes (For 1000 ticks = Around 100): " + totalPickedBoxes);
+		System.out.println();
 		System.out.println("Total Boxes Left in Sections: " + totalSectionBoxes);
+		System.out.println("Stockers Leftover Inventories: " + leftoverInventory);
+		System.out.println("Total Picked Boxes (Approx. 0.1 per tick): " + totalPickedBoxes);
+		System.out.println();
+		System.out.println("Total Processed (Delivered/Stocked/Picked) Boxes: " + (totalSectionBoxes + totalPickedBoxes + leftoverInventory + stagingArea.getSize()));
+		System.out.println();
 		System.out.println("Total Processed should match (Total Picked) + (Total Left in Sections) + (Leftover Stocker Inventory) + (Staging Area Stock)");
 		System.out.println("Total Processed should match (10 * Deliveries) + Starting Stock!");
 	}

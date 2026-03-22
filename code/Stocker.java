@@ -1,6 +1,7 @@
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.HashMap;
+import java.util.Random;
 import java.util.ArrayList;
 
 enum StockerStatus {MOVING, TAKING, STOCKING, WAITING}
@@ -11,11 +12,15 @@ public class Stocker extends Worker {
 
 	private final String id;
 	private static int nextId = 1;
+	private static Random RNG = null;
 	private ConcurrentHashMap<String, ConcurrentLinkedQueue<Box>> inventory = new ConcurrentHashMap<>();
 	private int inventorySize = 0;
 	private String position = "staging";
 	private StockerStatus status = StockerStatus.WAITING;
 	private int readyTick = 0;
+	private int startBreakTick = -1;
+	private int endBreakTick = -1;
+	private boolean onBreak = false;
 	private StagingArea stagingArea;
 	private HashMap<String, Section> sections;
 	private String nextMoveTarget = null;
@@ -29,11 +34,12 @@ public class Stocker extends Worker {
 	private int currentStockTarget = 0;  // how many we intended to stock this trip
 	private int currentStocked = 0;      // how many we've already moved
 
-	public Stocker(StagingArea stagingArea, HashMap<String, Section> sections, TrolleyPool trolleyPool) {
+	public Stocker(StagingArea stagingArea, HashMap<String, Section> sections, TrolleyPool trolleyPool, long seed) {
 		this.stagingArea = stagingArea;
 		this.sections = sections;
 		this.trolleyPool = trolleyPool;
 		this.id = "S" + nextId++;
+		RNG = new Random(seed);
 	}
 
 	// GETTERS
@@ -97,13 +103,14 @@ public class Stocker extends Worker {
 	public void take() {
 		try {
 			if (status != StockerStatus.TAKING){ // Not yet taking, try to acquire lock
-				stagingArea.acquireForStocker();
+				if (stagingArea.isDelivererWaiting()) return;
+				if (!stagingArea.tryAcquireStagingLock()) return;
 				status = StockerStatus.TAKING;
 			}
 
 			// Check if there are boxes to take
 			if (stagingArea.isEmpty()) { // Cannot take anything, wait instead
-				stagingArea.releaseForStocker();
+				stagingArea.releaseStagingLock();
 				status = StockerStatus.WAITING;
 				return;
 			}
@@ -123,16 +130,80 @@ public class Stocker extends Worker {
 			}
 
 			// Fill up inventory as much as possible
-			int space = INVENTORY_LIMIT - inventorySize;
+			// int space = INVENTORY_LIMIT - inventorySize;
 
-			for (int i = 0; i < space && !stagingArea.isEmpty(); i++) {
-				Box box = stagingArea.removeBox();
-				addToInventory(box);
+			// while (inventorySize < INVENTORY_LIMIT && !stagingArea.isEmpty()) {
+			// 	int emptyCategories = 0;
+			// 	for (String category: sections.keySet()){
+			// 		if (!inventoryContainsCategory(category))
+			// 			emptyCategories++;
+			// 	}
+
+			// 	for (String category: sections.keySet()){
+			// 		if (inventoryContainsCategory(category) && inventorySize < INVENTORY_LIMIT - emptyCategories)
+					
+			// 		if (sections.get(category).isEmpty() && !inventoryContainsCategory(category) && ) {
+			// 			Box box = stagingArea.removeBox(category);
+			// 			addToInventory(box);
+			// 		}
+			// 		else if ()
+			// 	}
+			// }
+
+			// Phase 1: Empty sections
+			for (String category : sections.keySet()) {
+				if (inventorySize >= INVENTORY_LIMIT) break;
+
+				Section section = sections.get(category);
+
+				if (section.isEmpty() && !inventoryContainsCategory(category)) {
+					Box box = stagingArea.removeBox(category);
+					if (box != null) addToInventory(box);
+				}
 			}
+
+			// Phase 2: Coverage
+			for (String category : sections.keySet()) {
+				if (inventorySize >= INVENTORY_LIMIT) break;
+
+				Section section = sections.get(category);
+
+				if (!section.isFull() && !inventoryContainsCategory(category)) {
+					Box box = stagingArea.removeBox(category);
+					if (box != null) addToInventory(box);
+				}
+			}
+
+			// Phase 3: Fill remaining
+			while (inventorySize < INVENTORY_LIMIT && !stagingArea.isEmpty()) {
+
+				boolean added = false;
+
+				for (String category : sections.keySet()) {
+					if (inventorySize >= INVENTORY_LIMIT) break;
+
+					Section section = sections.get(category);
+					if (section.isFull()) continue;
+
+					Box box = stagingArea.removeBox(category);
+					if (box != null) {
+						addToInventory(box);
+						added = true;
+					}
+				}
+
+				if (!added) break;
+			}
+
+			// for (int i = 0; i < space && !stagingArea.isEmpty(); i++) {
+
+			// 	Box box = stagingArea.removeBox();
+			// 	addToInventory(box);
+			// }
 
 			Logging.logEventWithBoxes(id,"stocker_load",getInventoryItems(),true, trolley.getId());
 
-			stagingArea.releaseForStocker(); // Taking complete, release lock
+			stagingArea.releaseStagingLock(); // Taking complete, release lock
 
 			ArrayList<String> priorityCategories = getInventoryCategoryPriorities(); // Save where to move (so we can move there on next tick)
 			nextMoveTarget = priorityCategories.isEmpty() ? null : priorityCategories.get(0);
@@ -149,7 +220,7 @@ public class Stocker extends Worker {
 		Section currentSection = sections.get(position);
 
 		if (status != StockerStatus.STOCKING) {
-			// currentSection.getStockerLock().lock();
+			currentSection.getLock().lock();
 			Logging.logMessage(id,
 				"event=stock_begin section=" + position + " amount=" + currentStockTarget + " trolley_id=" + trolley.getId());
 
@@ -159,10 +230,9 @@ public class Stocker extends Worker {
 		if (inventoryContainsCategory(position)){
 			
 			Box box = removeFromInventory(position);
-			boolean success = currentSection.tryAddBox(box);
+			boolean success = currentSection.stockerTryAddBox(box);
 
 			if (success){
-				sections.get(position).stockerDoneStocking();
 				readyTick = Ticker.getCurrentTick() + 1;
 				currentStocked++;
 				return;
@@ -170,16 +240,42 @@ public class Stocker extends Worker {
 
 			addToInventory(box); // Failed to stock box, give it back
 
+			currentSection.getLock().unlock();
+			sections.get(position).stockerDoneStocking();
+
+			boolean hasValidTarget = false;
+			for (String category : inventory.keySet()) {
+				if (!inventory.get(category).isEmpty()) {
+					Section s = sections.get(category);
+					if (!s.isFull()) {
+						hasValidTarget = true;
+						break;
+					}
+				}
+			}
+
+			if (!hasValidTarget) {
+				// Return to staging area to fetch boxes for categories with free capacity
+				Logging.logMessage(id, "event=stock_end section=" + position +
+					" stocked=" + currentStocked + " remaining_load=" + inventorySize + " trolley_id=" + trolley.getId());
+				moveTo("staging");
+				return;
+			}
+
+			// Find next section to move to based on section emptiness priority
 			ArrayList<String> priorityList = getInventoryCategoryPriorities();
 
 			for (String category: priorityList) {
 				if (!category.equals(position)){
+					Logging.logMessage(id, "event=stock_end section=" + position +
+						" stocked=" + currentStocked + " remaining_load=" + inventorySize + " trolley_id=" + trolley.getId());
 					moveTo(category);
 					return;
 				}
 			}
 
-			// No viable section, end stocking
+			// No sections to stock left, end stocking
+
 			Logging.logMessage(id, "event=stock_end section=" + position +
 				" stocked=" + currentStocked + " remaining_load=" + inventorySize + " trolley_id=" + trolley.getId());
 
@@ -196,6 +292,7 @@ public class Stocker extends Worker {
 			Logging.logMessage(id, "event=stock_end section=" + position +
 				" stocked=" + currentStocked + " remaining_load=" + inventorySize + " trolley_id=" + trolley.getId());
 			
+			currentSection.getLock().unlock();
 			sections.get(position).stockerDoneStocking();
 			
 			ArrayList<String> priorityList = getInventoryCategoryPriorities();
@@ -235,12 +332,34 @@ public class Stocker extends Worker {
 
 	// MAIN PER-TICK RUNNER
 	public void advance(){
+		if (!Ticker.getInstance().isRunning()) return;
 
 		int tick = Ticker.getCurrentTick();
 
-		if (tick < readyTick){
+		// We are after a break, figure out the next break period
+		if (endBreakTick < tick){
+			if (onBreak) {
+				onBreak = false;
+				Logging.logMessage(id, "ending break");
+			}
+			startBreakTick = tick + 200 + RNG.nextInt(100);
+			endBreakTick = startBreakTick + 150;
+			Logging.logMessage(id, "next break between ticks " + startBreakTick + " and " + endBreakTick);
+		}
+
+		// We are entering a break period
+		if (!onBreak && startBreakTick <= tick && tick <= endBreakTick){
+			Logging.logMessage(id, "starting break");
+			readyTick = readyTick + 150;
+			onBreak = true;
 			return;
 		}
+
+		if (onBreak || tick < readyTick){
+			return;
+		}
+
+		// Randomly decide if a break should be taken
 
 		switch(status){
 

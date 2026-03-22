@@ -63,6 +63,10 @@ public class Ticker {
         return getInstance().tickDuration;
     }
 
+    public static int getTicksPerDay(){
+        return TICKS_IN_DAY;
+    }
+
     // RUNNERS
     public void start(){
         for (Worker worker : workers){
@@ -80,7 +84,7 @@ public class Ticker {
         } finally {
             tickLock.unlock();
         }
-        threadExecutor.shutdown();
+        threadExecutor.shutdownNow();
     }
 
     // WORKER WAITING HANDLER
@@ -111,9 +115,9 @@ public class Ticker {
             currentTick++;
             totalTicksElapsed++;
 
-            if (currentTick >= TICKS_IN_DAY){
+            if (currentTick % 1000 == 0){
                 currentDay++;
-                currentTick %= TICKS_IN_DAY;
+                // currentTick %= TICKS_IN_DAY;
             }
 
             tickAdvanced.signalAll();
@@ -123,7 +127,6 @@ public class Ticker {
         }
 
         if (totalTicksElapsed >= totalRuntimeLength){
-            Logging.logMessage("MAIN","ending simulation");
             stop();
         }
     }

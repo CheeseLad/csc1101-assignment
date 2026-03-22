@@ -23,24 +23,33 @@ public class Section {
 	public int getSize() {
 		sectionLock.lock();
 		try {
-			return this.boxes.size();
+			return boxes.size();
 		} finally {
 			sectionLock.unlock();
 		}
 	}
 
 	public String getCategory() {
-		return this.category;
+		return category;
 	}
 
 	public boolean isEmpty() {
 		sectionLock.lock();
 		try {
-			return this.boxes.isEmpty();
+			return boxes.isEmpty();
 		} finally {
 			sectionLock.unlock();
 		}
 	}
+
+    public boolean isFull() {
+        sectionLock.lock();
+        try {
+			return boxes.size() == CAPACITY;
+		} finally {
+			sectionLock.unlock();
+		}
+    }
 
 	public void stockerDoneStocking() {
 		sectionLock.lock();
@@ -77,22 +86,21 @@ public class Section {
         }
     }
 
-    public boolean tryAddBox(Box box) {
-        sectionLock.lock();
-        try {
-            if (boxes.size() >= CAPACITY) return false;
+    public boolean stockerTryAddBox(Box box) {
+        if (boxes.size() >= CAPACITY) return false;
 
-            if (box.getCategory().equals(category)) {
-                boxes.add(box);
-                if (verbose) {
-                    System.out.println("Section " + category + " added a box. New size: " + boxes.size());
-                }
-                return true;
+        if (box.getCategory().equals(category)) {
+            boxes.add(box);
+            if (verbose) {
+                System.out.println("Section " + category + " added a box. New size: " + boxes.size());
             }
-            return false;
-        } finally {
-            sectionLock.unlock();
+            return true;
         }
+        return false;
+    }
+
+    public ReentrantLock getLock() {
+        return sectionLock;
     }
 
     public Box removeBox() throws InterruptedException {
