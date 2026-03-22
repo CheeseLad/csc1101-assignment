@@ -5,8 +5,8 @@ import java.util.concurrent.locks.Condition;
 
 public class Section {
 
+    public static int CAPACITY;
 	private String category;
-    private int capacity;
     private boolean verbose;
 	private ConcurrentLinkedQueue<Box> boxes = new ConcurrentLinkedQueue<>();
 
@@ -16,31 +16,40 @@ public class Section {
 
 	public Section(String category, int capacity, boolean verbose) {
 		this.category = category;
-		this.capacity = capacity;
+		CAPACITY = capacity;
 		this.verbose = verbose;
 	}
 
 	public int getSize() {
 		sectionLock.lock();
 		try {
-			return this.boxes.size();
+			return boxes.size();
 		} finally {
 			sectionLock.unlock();
 		}
 	}
 
 	public String getCategory() {
-		return this.category;
+		return category;
 	}
 
 	public boolean isEmpty() {
 		sectionLock.lock();
 		try {
-			return this.boxes.isEmpty();
+			return boxes.isEmpty();
 		} finally {
 			sectionLock.unlock();
 		}
 	}
+
+    public boolean isFull() {
+        sectionLock.lock();
+        try {
+			return boxes.size() == CAPACITY;
+		} finally {
+			sectionLock.unlock();
+		}
+    }
 
 	public void stockerDoneStocking() {
 		sectionLock.lock();
@@ -54,7 +63,7 @@ public class Section {
     public void addBox(Box box) throws InterruptedException {
         sectionLock.lock();
         try {
-            while (boxes.size() >= capacity) {
+            while (boxes.size() >= CAPACITY) {
                 if (verbose) {
                     System.out.println("Section " + category + " is full, waiting...");
                 }
@@ -75,6 +84,23 @@ public class Section {
         } finally {
             sectionLock.unlock();
         }
+    }
+
+    public boolean stockerTryAddBox(Box box) {
+        if (boxes.size() >= CAPACITY) return false;
+
+        if (box.getCategory().equals(category)) {
+            boxes.add(box);
+            if (verbose) {
+                System.out.println("Section " + category + " added a box. New size: " + boxes.size());
+            }
+            return true;
+        }
+        return false;
+    }
+
+    public ReentrantLock getLock() {
+        return sectionLock;
     }
 
     public Box removeBox() throws InterruptedException {

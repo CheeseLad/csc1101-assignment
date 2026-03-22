@@ -53,12 +53,12 @@ public class Logging {
         System.out.println("tick=" + tickStr + " tid=" + threadId + " event=" + event + " pick_id=" + pickId + " section=" + section + " trolley_id=" + trolleyId);
     }
 
-    public static void logPickerEvent(String threadId, String event, int pickId, String section, int waitedTicks, int trolleyId) {
+    public static void logPickerEvent(String threadId, String event, int pickId, String section, int waitedTicks, int section_load, int trolleyId) {
         int tick = Ticker.getCurrentTick();
         String tickStr = tick < 0 ? "?" : Integer.toString(tick);
         String pickStr = pickId < 0 ? "?" : Integer.toString(pickId);
 
-        System.out.println("tick=" + tickStr + " tid=" + threadId + " event=" + event + " pick_id=" + pickId + " section=" + section + " waited_ticks=" + waitedTicks + " trolley_id=" + trolleyId);
+        System.out.println("tick=" + tickStr + " tid=" + threadId + " event=" + event + " pick_id=" + pickId + " section=" + section + " stock_left=" + section_load + " waited_ticks=" + waitedTicks + " trolley_id=" + trolleyId);
     }
 
     public static void logTrolleyEvent(String threadId, String event, int trolleyId) {

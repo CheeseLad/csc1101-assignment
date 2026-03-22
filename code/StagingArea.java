@@ -9,12 +9,9 @@ public class StagingArea {
     private final ReentrantLock stagingAreaLock = new ReentrantLock(true);
 
     private final Condition stagingFree = stagingAreaLock.newCondition();
+    private volatile boolean delivererWaiting = false;
 
     private boolean stockerPresent = false;
-
-    public ReentrantLock getLock(){
-        return stagingAreaLock;
-    }
 
     public void addBox(Box box){
         boxes.add(box);
@@ -22,6 +19,17 @@ public class StagingArea {
 
     public Box removeBox(){
         return boxes.poll();
+    }
+
+    public Box removeBox(String category){
+        for (Box box: boxes){
+            if (box.getCategory().equals(category)) {
+                if (boxes.remove(box)) {
+                    return box;
+                }
+            }
+        }
+        return null;
     }
 
     public boolean isEmpty(){
@@ -32,17 +40,32 @@ public class StagingArea {
         return boxes.size();
     }
 
-    public void acquireForStocker() throws InterruptedException {  
-        stagingAreaLock.lock();
-        while(stockerPresent){
-            stagingFree.await();
-        }
-        stockerPresent = true;
+    public ConcurrentLinkedQueue<Box> getBoxes(){
+        return boxes;
     }
 
-    public void releaseForStocker(){
+    public boolean tryAcquireStagingLock() {
+        if (!stagingAreaLock.tryLock()) return false;
+
+        while(stockerPresent){
+            stagingAreaLock.unlock();
+            return false;
+        }
+        stockerPresent = true;
+        return true;
+    }
+
+    public void releaseStagingLock(){
         stockerPresent = false;
         stagingFree.signal();
         stagingAreaLock.unlock();
+    }
+
+    public void setDelivererWaiting(boolean waiting) {
+        delivererWaiting = waiting;
+    }
+
+    public boolean isDelivererWaiting() {
+        return delivererWaiting;
     }
 }
