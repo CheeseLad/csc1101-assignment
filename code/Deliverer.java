@@ -4,29 +4,34 @@ import java.util.ArrayList;
 enum DelivererStatus {DELIVERING, WAITING}
 
 public class Deliverer extends Worker {
+	
+	private final String id;
 	private static int nextId = 1;
-	private static int totalDeliveries = 0;
-	private DelivererStatus status = DelivererStatus.WAITING;
+	private static Random RNG = null;
 
+	// Internal State
+	private DelivererStatus status = DelivererStatus.WAITING;
 	private int deliverySize;
 	private double deliveryProbability;
-	private Random RNG = null;
+	private static int totalDeliveries = 0;
+	
+	// Environment
 	private String[] categories;
 	private final int categoriesCount;
 	private StagingArea stagingArea;
-	private final String id;
+	
 
-  	public Deliverer(String[] categories, StagingArea stagingArea, long seed, int deliverySize, double deliveryProbability) {
+  	public Deliverer(StagingArea stagingArea, String[] categories, int deliverySize, double deliveryProbability, long seed) {
+		this.id = "D" + nextId++;
+		this.stagingArea = stagingArea;
 		this.categories = categories;
 		this.categoriesCount = categories.length;
-		this.stagingArea = stagingArea;
-		this.id = "D" + nextId++;
 		this.deliverySize = deliverySize;
 		this.deliveryProbability = deliveryProbability;
 		if (seed != 0)
-			this.RNG = new Random(seed);
+			RNG = new Random(seed);
 		else
-			this.RNG = new Random(seed);
+			RNG = new Random();
 	}
 
 	public String getId() {

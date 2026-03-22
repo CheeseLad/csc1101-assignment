@@ -7,23 +7,30 @@ import java.util.ArrayList;
 enum StockerStatus {MOVING, TAKING, STOCKING, WAITING}
 
 public class Stocker extends Worker {
-	
-	private static final int INVENTORY_LIMIT = 10;
 
 	private final String id;
 	private static int nextId = 1;
 	private static Random RNG = null;
+	
+	// Internal State
 	private ConcurrentHashMap<String, ConcurrentLinkedQueue<Box>> inventory = new ConcurrentHashMap<>();
 	private int inventorySize = 0;
-	private String position = "staging";
+	private final int inventoryLimit;
 	private StockerStatus status = StockerStatus.WAITING;
-	private int readyTick = 0;
-	private int startBreakTick = -1;
-	private int endBreakTick = -1;
-	private boolean onBreak = false;
+	private int readyTick = 0; // Tracks when Stocker is ready for next action
+	
+	// Environment
 	private StagingArea stagingArea;
 	private HashMap<String, Section> sections;
 	private String nextMoveTarget = null;
+	private String position = "staging"; // All Stockers start at Staging Area
+
+	// Break trackers
+	private int startBreakTick = -1;
+	private int endBreakTick = -1;
+	private boolean onBreak = false;
+	private Section lockedSection = null; // For recovering state after break
+	private boolean holdingStagingLock = false; // For recovering state after break
 
 	// Trolley trackers
 	private TrolleyPool trolleyPool;
@@ -34,12 +41,16 @@ public class Stocker extends Worker {
 	private int currentStockTarget = 0;  // how many we intended to stock this trip
 	private int currentStocked = 0;      // how many we've already moved
 
-	public Stocker(StagingArea stagingArea, HashMap<String, Section> sections, TrolleyPool trolleyPool, long seed) {
+	public Stocker(StagingArea stagingArea, HashMap<String, Section> sections, TrolleyPool trolleyPool, int inventoryLimit, long seed) {
+		this.id = "S" + nextId++;
 		this.stagingArea = stagingArea;
 		this.sections = sections;
 		this.trolleyPool = trolleyPool;
-		this.id = "S" + nextId++;
-		RNG = new Random(seed);
+		this.inventoryLimit = inventoryLimit;
+		if (seed != 0)
+			RNG = new Random(seed);
+		else
+			RNG = new Random();
 	}
 
 	// GETTERS
@@ -76,12 +87,12 @@ public class Stocker extends Worker {
 		return inventory.containsKey(category) && !inventory.get(category).isEmpty();
 	}
 
-	private ArrayList<String> getInventoryCategoryPriorities(){
-		// Gets the next category with the lowest stock of boxes //
+	private ArrayList<String> getInventoryCategoryPriorityList(){
+		// Get categories in ascending section stock order, skipping sections stocker has no boxes for
 		
 		ArrayList<String> categories = new ArrayList<>();
 
-		// Collect valid categories (present in inventory)
+		// Collect valid categories (valid box in inventory)
 		for (String category : inventory.keySet()) {
 			if (!inventory.get(category).isEmpty()) {
 				categories.add(category);
@@ -102,16 +113,21 @@ public class Stocker extends Worker {
 	// BEHAVIOUR HANDLING
 	public void take() {
 		try {
-			if (status != StockerStatus.TAKING){ // Not yet taking, try to acquire lock
-				if (stagingArea.isDelivererWaiting()) return;
+			// Not yet taking, try acquiring staging area lock if no deliverers are waiting for lock & begin taking, otherwise wait for next tick 
+			if (status != StockerStatus.TAKING){
+				if (stagingArea.isDelivererWaiting()) return; // Deliverer priority to prevent delivery starvation (in case of many stockers)
 				if (!stagingArea.tryAcquireStagingLock()) return;
+				holdingStagingLock = true;
 				status = StockerStatus.TAKING;
 			}
 
 			// Check if there are boxes to take
-			if (stagingArea.isEmpty()) { // Cannot take anything, wait instead
+			if (stagingArea.isEmpty()) {
+				// Nothing to take, so provide lock priority for Deliverer and release lock.
+				stagingArea.setDelivererWaiting(true);
 				stagingArea.releaseStagingLock();
-				status = StockerStatus.WAITING;
+				holdingStagingLock = false;
+				status = StockerStatus.WAITING; // Reset status (for per-tick lock acquire retries)
 				return;
 			}
 
@@ -124,35 +140,17 @@ public class Stocker extends Worker {
 				trolley = trolleyPool.tryAcquireTrolley(this);
 				if (trolley == null) return;
 
+				// Trolley acquired
 				int waited = Ticker.getCurrentTick() - trolleyWaitStartTick;
 				Logging.logTrolleyEvent(this.id, "acquire_trolley", trolley.getId(), waited);
 				trolleyWaitStartTick = -1;
 			}
 
-			// Fill up inventory as much as possible
-			// int space = INVENTORY_LIMIT - inventorySize;
+			// Taking from Staging Area
 
-			// while (inventorySize < INVENTORY_LIMIT && !stagingArea.isEmpty()) {
-			// 	int emptyCategories = 0;
-			// 	for (String category: sections.keySet()){
-			// 		if (!inventoryContainsCategory(category))
-			// 			emptyCategories++;
-			// 	}
-
-			// 	for (String category: sections.keySet()){
-			// 		if (inventoryContainsCategory(category) && inventorySize < INVENTORY_LIMIT - emptyCategories)
-					
-			// 		if (sections.get(category).isEmpty() && !inventoryContainsCategory(category) && ) {
-			// 			Box box = stagingArea.removeBox(category);
-			// 			addToInventory(box);
-			// 		}
-			// 		else if ()
-			// 	}
-			// }
-
-			// Phase 1: Empty sections
+			// 1. Try to have at least one of each box category for each currently empty section (ensure progress)
 			for (String category : sections.keySet()) {
-				if (inventorySize >= INVENTORY_LIMIT) break;
+				if (inventorySize >= inventoryLimit) break;
 
 				Section section = sections.get(category);
 
@@ -162,9 +160,9 @@ public class Stocker extends Worker {
 				}
 			}
 
-			// Phase 2: Coverage
+			// 2. Now take a box for each non-full section.
 			for (String category : sections.keySet()) {
-				if (inventorySize >= INVENTORY_LIMIT) break;
+				if (inventorySize >= inventoryLimit) break;
 
 				Section section = sections.get(category);
 
@@ -174,13 +172,13 @@ public class Stocker extends Worker {
 				}
 			}
 
-			// Phase 3: Fill remaining
-			while (inventorySize < INVENTORY_LIMIT && !stagingArea.isEmpty()) {
+			// 3. If we still have space, fill up inventory with boxes for non-full sections
+			while (inventorySize < inventoryLimit && !stagingArea.isEmpty()) {
 
-				boolean added = false;
+				boolean added = false; 
 
 				for (String category : sections.keySet()) {
-					if (inventorySize >= INVENTORY_LIMIT) break;
+					if (inventorySize >= inventoryLimit) break;
 
 					Section section = sections.get(category);
 					if (section.isFull()) continue;
@@ -192,94 +190,82 @@ public class Stocker extends Worker {
 					}
 				}
 
-				if (!added) break;
+				if (!added) break; // Don't loop if there's no relevant boxes to add
 			}
 
-			// for (int i = 0; i < space && !stagingArea.isEmpty(); i++) {
+			// Note: The stocker_load shows current inventory, not what was actually added
+			Logging.logEventWithBoxes(id,"stocker_load", getInventoryItems(),true, trolley.getId());
 
-			// 	Box box = stagingArea.removeBox();
-			// 	addToInventory(box);
-			// }
+			stagingArea.releaseStagingLock();
+			holdingStagingLock = false;
 
-			Logging.logEventWithBoxes(id,"stocker_load",getInventoryItems(),true, trolley.getId());
-
-			stagingArea.releaseStagingLock(); // Taking complete, release lock
-
-			ArrayList<String> priorityCategories = getInventoryCategoryPriorities(); // Save where to move (so we can move there on next tick)
+			ArrayList<String> priorityCategories = getInventoryCategoryPriorityList(); // Save where to move (so we can move there on next tick)
 			nextMoveTarget = priorityCategories.isEmpty() ? null : priorityCategories.get(0);
 
 			readyTick = Ticker.getCurrentTick() + 1;
 			status = StockerStatus.MOVING;
 
-		} catch (InterruptedException e) {
-			Thread.currentThread().interrupt();
+		} catch (Exception e) {
+			Logging.logMessage(id, "Stocker failed in take(). Force releasing staging area lock for deadlock prevention. Did the simulation terminate?");
+			stagingArea.releaseStagingLock();
+			holdingStagingLock = false;
 		}
 	}
 
 	public void stock(){
 		Section currentSection = sections.get(position);
+		try {
+			// Try acquiring section lock & begin stocking, otherwise wait for next tick
+			if (status != StockerStatus.STOCKING) {
+				if (!currentSection.tryStockerLock()) return;
+				lockedSection = currentSection;
+				Logging.logMessage(id,
+					"event=stock_begin section=" + position + " amount=" + currentStockTarget + " trolley_id=" + trolley.getId());
 
-		if (status != StockerStatus.STOCKING) {
-			currentSection.getLock().lock();
-			Logging.logMessage(id,
-				"event=stock_begin section=" + position + " amount=" + currentStockTarget + " trolley_id=" + trolley.getId());
-
-			status = StockerStatus.STOCKING;
-		}
-
-		if (inventoryContainsCategory(position)){
-			
-			Box box = removeFromInventory(position);
-			boolean success = currentSection.stockerTryAddBox(box);
-
-			if (success){
-				readyTick = Ticker.getCurrentTick() + 1;
-				currentStocked++;
-				return;
+				status = StockerStatus.STOCKING;
 			}
 
-			addToInventory(box); // Failed to stock box, give it back
+			// We are in stocking mode
 
-			currentSection.getLock().unlock();
-			sections.get(position).stockerDoneStocking();
+			// Do we have valid boxes for this section?
+			if (inventoryContainsCategory(position)){
+				
+				// Try adding a box to the section. This box adding happens each tick until section is full or no more valid boxes in inventory.
+				Box box = removeFromInventory(position);
+				boolean success = currentSection.stockerTryAddBox(box);
 
-			boolean hasValidTarget = false;
-			for (String category : inventory.keySet()) {
-				if (!inventory.get(category).isEmpty()) {
-					Section s = sections.get(category);
-					if (!s.isFull()) {
-						hasValidTarget = true;
-						break;
-					}
+				if (success){
+					readyTick = Ticker.getCurrentTick() + 1;
+					currentStocked++;
+					return;
 				}
+
+				// Failed to add new box but we should still have valid boxes left! We assume section is full or otherwise inaccessible at the moment.
+
+				// Give back my box!
+				addToInventory(box);
 			}
+			
+			// There is no boxes (left) in inventory for this section
 
-			if (!hasValidTarget) {
-				// Return to staging area to fetch boxes for categories with free capacity
-				Logging.logMessage(id, "event=stock_end section=" + position +
-					" stocked=" + currentStocked + " remaining_load=" + inventorySize + " trolley_id=" + trolley.getId());
-				moveTo("staging");
-				return;
-			}
-
-			// Find next section to move to based on section emptiness priority
-			ArrayList<String> priorityList = getInventoryCategoryPriorities();
-
-			for (String category: priorityList) {
-				if (!category.equals(position)){
-					Logging.logMessage(id, "event=stock_end section=" + position +
-						" stocked=" + currentStocked + " remaining_load=" + inventorySize + " trolley_id=" + trolley.getId());
+			Logging.logMessage(id, "event=stock_end section=" + position +
+				" stocked=" + currentStocked + " remaining_load=" + inventorySize + " trolley_id=" + trolley.getId());
+			
+			currentSection.releaseStockerLock();
+			lockedSection = null;
+			
+			// Can I stock elsewhere that is not full and is prioritised by ascending current section stock?
+			for (String category : getInventoryCategoryPriorityList()) {
+				Section section = sections.get(category);
+				if (!section.isFull()) {
 					moveTo(category);
 					return;
 				}
 			}
 
-			// No sections to stock left, end stocking
+			// Can't stock anything with current inventory, return to staging to restock to ensure progress.
 
-			Logging.logMessage(id, "event=stock_end section=" + position +
-				" stocked=" + currentStocked + " remaining_load=" + inventorySize + " trolley_id=" + trolley.getId());
-
-			if (trolley != null){
+			if (inventorySize == 0 && trolley != null) {
 				trolleyPool.releaseTrolley(this, trolley);
 				Logging.logTrolleyEvent(this.id, "release_trolley", trolley.getId());
 				trolley = null;
@@ -287,30 +273,10 @@ public class Stocker extends Worker {
 
 			moveTo("staging");
 		}
-		else {
-			// currentSection.getStockerLock().unlock();
-			Logging.logMessage(id, "event=stock_end section=" + position +
-				" stocked=" + currentStocked + " remaining_load=" + inventorySize + " trolley_id=" + trolley.getId());
-			
-			currentSection.getLock().unlock();
-			sections.get(position).stockerDoneStocking();
-			
-			ArrayList<String> priorityList = getInventoryCategoryPriorities();
-    		String nextPosition = priorityList.isEmpty() ? null : priorityList.get(0);
-
-			if (nextPosition == null) {
-				// Inventory is empty and returning to staging area, release trolley
-				if (trolley != null){
-					trolleyPool.releaseTrolley(this, trolley);
-					Logging.logTrolleyEvent(this.id, "release_trolley", trolley.getId());
-					trolley = null;
-				}
-
-				moveTo("staging");
-			}
-			else {
-				moveTo(nextPosition);
-			}
+		catch (Exception e) {
+			Logging.logMessage(id, "Stocker failed in stock(). Force releasing section lock for deadlock prevention. Did the simulation terminate?");
+			currentSection.releaseStockerLock();
+			lockedSection = null;
 		}
 	}
 
@@ -325,41 +291,57 @@ public class Stocker extends Worker {
 			currentStockTarget = inventory.containsKey(newPosition) ? inventory.get(newPosition).size() : 0;
 			currentStocked = 0;
 		}
+		
 		this.status = StockerStatus.MOVING;
 		this.position = newPosition;
 		readyTick = Ticker.getCurrentTick() + 10 + inventorySize;
 	}
 
-	// MAIN PER-TICK RUNNER
+	private void releaseAllLocks() {
+		// Open the flood gates!
+		if (lockedSection != null) {
+			lockedSection.releaseStockerLock();
+			lockedSection = null;
+		}
+		if (holdingStagingLock) {
+			stagingArea.releaseStagingLock();
+			holdingStagingLock = false;
+		}
+	}
+
+
 	public void advance(){
 		if (!Ticker.getInstance().isRunning()) return;
 
-		int tick = Ticker.getCurrentTick();
+		int currentTick = Ticker.getCurrentTick();
 
-		// We are after a break, figure out the next break period
-		if (endBreakTick < tick){
+		// Did previous break period end?
+		if (endBreakTick < currentTick){
 			if (onBreak) {
 				onBreak = false;
 				Logging.logMessage(id, "ending break");
 			}
-			startBreakTick = tick + 200 + RNG.nextInt(100);
-			endBreakTick = startBreakTick + 150;
+
+			startBreakTick = currentTick + 200 + RNG.nextInt(100); // Next break in 200-300 ticks
+			endBreakTick = startBreakTick + 150; // Break always lasts 150 ticks
 			Logging.logMessage(id, "next break between ticks " + startBreakTick + " and " + endBreakTick);
 		}
 
 		// We are entering a break period
-		if (!onBreak && startBreakTick <= tick && tick <= endBreakTick){
+		if (!onBreak && startBreakTick <= currentTick && currentTick <= endBreakTick){
 			Logging.logMessage(id, "starting break");
-			readyTick = readyTick + 150;
+			releaseAllLocks();
+			status = StockerStatus.WAITING;
+			nextMoveTarget = null;
+			readyTick = readyTick + 150; // Pause action we are doing for 150 ticks
 			onBreak = true;
 			return;
 		}
 
-		if (onBreak || tick < readyTick){
+		if (onBreak || currentTick < readyTick){
+			// If we are on break or not ready for next action (doing something already), skip tick
 			return;
 		}
-
-		// Randomly decide if a break should be taken
 
 		switch(status){
 

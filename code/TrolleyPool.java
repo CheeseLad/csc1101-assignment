@@ -14,7 +14,7 @@ public class TrolleyPool {
         }
 	}
 
-    public synchronized Trolley tryAcquireTrolley(Worker worker) throws InterruptedException {
+    public synchronized Trolley tryAcquireTrolley(Worker worker) {
         
         int availableTrolleyCount = trolleyPool.size();
 

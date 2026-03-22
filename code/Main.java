@@ -35,7 +35,8 @@ public class Main {
 		final int DELIVERY_SIZE = Integer.parseInt(config.getProperty("DELIVERY_SIZE", "10"));
 		final int TROLLEY_POOL_SIZE = Integer.parseInt(config.getProperty("TROLLEY_POOL_SIZE", "0"));
 		final int SECTION_CAPACITY = Integer.parseInt(config.getProperty("SECTION_CAPACITY", "0"));
-		final int INITIAL_SECTION_SIZES = Integer.parseInt(config.getProperty("INITIAL_SECTION_SIZES", "5"));
+		final int INITIAL_SECTION_SIZE = Integer.parseInt(config.getProperty("INITIAL_SECTION_SIZES", "5"));
+		final int STOCKER_INVENTORY_LIMIT = Integer.parseInt(config.getProperty("STOCKER_INVENTORY_LIMIT", "10"));
 		
 		// TICK CONTROL
 		final int TICK_TIME_SIZE = Integer.parseInt(config.getProperty("TICK_TIME_SIZE", "50"));
@@ -45,8 +46,6 @@ public class Main {
 		final long SEED = Long.parseLong(config.getProperty("SEED", "0")); // Seed for replicable behaviour
 		final double DELIVERY_PROBABILITY = Double.parseDouble(config.getProperty("DELIVERY_PROBABILITY", "0.01"));
 		final double PICKER_PROBABILITY = Double.parseDouble(config.getProperty("PICKER_PROBABILITY", "0.1"));
-
-		final boolean VERBOSE = Boolean.parseBoolean(config.getProperty("VERBOSE", "false"));
 		
 
 		///// ENVIRONMENT PREPARATION /////
@@ -54,7 +53,7 @@ public class Main {
 		// TROLLEY POOL
 		TrolleyPool trolleyPool;
 
-		if (TROLLEY_POOL_SIZE <= 0) {
+		if (TROLLEY_POOL_SIZE < 2) {
 			int defaultTrolleyPoolSize = (int) Math.floor((STOCKERS_COUNT + PICKERS_COUNT) / 2.0);
 			trolleyPool = new TrolleyPool(defaultTrolleyPoolSize);
 		} else {
@@ -69,17 +68,12 @@ public class Main {
 
 		for (String category : CATEGORIES) {
 			// Generate sections from available categories
-			Section section = new Section(category, SECTION_CAPACITY, VERBOSE);
+			Section section = new Section(category, SECTION_CAPACITY);
 			sections.putIfAbsent(category, section);
 
-			// Per spec: You can assume each section of the warehouse begins with 5 boxes
-			for (int i = 0; i < INITIAL_SECTION_SIZES; i++){
-				try {
-					section.addBox(new Box(category));
-				} catch (InterruptedException e) {
-					e.printStackTrace();
-				}
-			}
+			// Per spec: You can assume each section of the warehouse begins with set amount of boxes (default: 5)
+			for (int i = 0; i < INITIAL_SECTION_SIZE; i++)
+				section.stockerTryAddBox(new Box(category)); // Pretend stockers filled them up
 		}
 
 		// WORKERS (DELIVERERS, STOCKERS, PICKERS)
@@ -87,34 +81,41 @@ public class Main {
 
 		// Generate workers, passing through config parameters as needed
 		for (int i = 0; i < DELIVERERS_COUNT; i++){
-			Deliverer newDeliverer = new Deliverer(CATEGORIES, stagingArea, SEED, DELIVERY_SIZE, DELIVERY_PROBABILITY);
+			Deliverer newDeliverer = new Deliverer(stagingArea, CATEGORIES, DELIVERY_SIZE, DELIVERY_PROBABILITY, SEED);
 			workers.add(newDeliverer);
 		}
 
 		for (int i = 0; i < STOCKERS_COUNT; i++){
-			Stocker newStocker = new Stocker(stagingArea, sections, trolleyPool, SEED);
+			Stocker newStocker = new Stocker(stagingArea, sections, trolleyPool, STOCKER_INVENTORY_LIMIT, SEED);
 			workers.add(newStocker);
 		}
 
 		for (int i = 0; i < PICKERS_COUNT; i++){
-			Picker newPicker = new Picker(sections, SEED, PICKER_PROBABILITY, trolleyPool);
+			Picker newPicker = new Picker(sections, trolleyPool, PICKER_PROBABILITY, SEED);
 			workers.add(newPicker);
 		}
 
-		// MAIN TICK HANDLER (TICKER)
+
+		/// MAIN TICK HANDLER (TICKER) ///
+
+
 		Ticker.initialise(TICK_TIME_SIZE, TOTAL_RUNTIME_TICKS, workers, TOTAL_THREAD_COUNT);
 		
 		// START SIMULATION
-		Logging.logMessage("MAIN","starting simulation");
+		Logging.logMessage("MAIN","start simulation");
 		Ticker.getInstance().start();
 
+		// Keep Main Thread alive while simulation runs
 		while(Ticker.getInstance().isRunning()){
-			Thread.yield(); // Yield reduced busy waiting costs
+			Thread.yield(); // Yield should reduce busy waiting costs
 		}
+		
+		Logging.logMessage("MAIN","end simulation");
 
-		// POST-SIMULATION SUMMARY
 
-		Logging.logMessage("MAIN","ending simulation");
+		/// POST-SIMULATION SUMMARY ///
+
+		
 		System.out.println();
 		System.out.println("--- FINAL WAREHOUSE STATE ---");
 		System.out.println();
@@ -138,9 +139,11 @@ public class Main {
 
 		System.out.println("Ending on day (starting from 0): " + Ticker.getCurrentDay());
 		System.out.println("Total ticks: " + Ticker.getCurrentTick());
-		System.out.println("Starting Stock: " + (CATEGORIES.length * INITIAL_SECTION_SIZES));
+		System.out.println("Starting Stock: " + (CATEGORIES.length * INITIAL_SECTION_SIZE));
 		System.out.println();
 		System.out.println("Total Deliveries: " + totalDeliveries);
+		System.out.format("Delivery Average per tick (expected ~0.01): %.3f \n", ((float)totalDeliveries / Ticker.getCurrentTick()));
+		System.out.println("Delivery Size: " + DELIVERY_SIZE);
 		System.out.println("Final Staging Area Size: " + stagingArea.getSize());
 		System.out.println();
 		System.out.println("Final Section Sizes:");
@@ -152,11 +155,13 @@ public class Main {
 		System.out.println();
 		System.out.println("Total Boxes Left in Sections: " + totalSectionBoxes);
 		System.out.println("Stockers Leftover Inventories: " + leftoverInventory);
-		System.out.println("Total Picked Boxes (Approx. 0.1 per tick): " + totalPickedBoxes);
+		System.out.println("Total Picked Boxes: " + totalPickedBoxes);
+		System.out.format("Pick Average per per tick (expected ~0.1): %.3f \n", ((float)totalPickedBoxes / Ticker.getCurrentTick()));
 		System.out.println();
 		System.out.println("Total Processed (Delivered/Stocked/Picked) Boxes: " + (totalSectionBoxes + totalPickedBoxes + leftoverInventory + stagingArea.getSize()));
 		System.out.println();
-		System.out.println("Total Processed should match (Total Picked) + (Total Left in Sections) + (Leftover Stocker Inventory) + (Staging Area Stock)");
-		System.out.println("Total Processed should match (10 * Deliveries) + Starting Stock!");
+		System.out.println("Total Processed Boxes should match (Leftover Section Boxes) + (Leftover Stocker Inventory) + (Total Boxes Picked) + (Leftover Staging Area Boxes)");
+		System.out.println("Total Processed Boxes also should match (Delivery Size * Total Deliveries) + (Starting Stock). This ensures no missing boxes.");
+		System.out.println();
 	}
 }
