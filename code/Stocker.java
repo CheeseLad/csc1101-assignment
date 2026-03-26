@@ -142,7 +142,7 @@ public class Stocker extends Worker {
 
 				// Trolley acquired
 				int waited = Ticker.getCurrentTick() - trolleyWaitStartTick;
-				Logging.logTrolleyEvent(this.id, "acquire_trolley", trolley.getId(), waited);
+				Logging.logTrolleyAcquireEvent(this.id, trolley.getId(), waited);
 				trolleyWaitStartTick = -1;
 			}
 
@@ -248,8 +248,7 @@ public class Stocker extends Worker {
 			
 			// There is no boxes (left) in inventory for this section
 
-			Logging.logMessage(id, "event=stock_end section=" + position +
-				" stocked=" + currentStocked + " remaining_load=" + inventorySize + " trolley_id=" + trolley.getId());
+			Logging.logMessage(id, "event=stock_end section=" + position + " stocked=" + currentStocked + " remaining_load=" + inventorySize + " trolley_id=" + trolley.getId());
 			
 			currentSection.releaseStockerLock();
 			lockedSection = null;
@@ -267,7 +266,7 @@ public class Stocker extends Worker {
 
 			if (inventorySize == 0 && trolley != null) {
 				trolleyPool.releaseTrolley(this, trolley);
-				Logging.logTrolleyEvent(this.id, "release_trolley", trolley.getId());
+				Logging.logTrolleyReleaseEvent(this.id, trolley.getId());
 				trolley = null;
 			}
 
@@ -317,19 +316,15 @@ public class Stocker extends Worker {
 
 		// Did previous break period end?
 		if (endBreakTick < currentTick){
-			if (onBreak) {
-				onBreak = false;
-				Logging.logMessage(id, "ending break");
-			}
-
+			onBreak = false;
 			startBreakTick = currentTick + 200 + RNG.nextInt(100); // Next break in 200-300 ticks
 			endBreakTick = startBreakTick + 150; // Break always lasts 150 ticks
-			Logging.logMessage(id, "next break between ticks " + startBreakTick + " and " + endBreakTick);
+			Logging.logMessage(id, "event=end_break (next break between ticks " + startBreakTick + " and " + endBreakTick + ")");
 		}
 
 		// We are entering a break period
 		if (!onBreak && startBreakTick <= currentTick && currentTick <= endBreakTick){
-			Logging.logMessage(id, "starting break");
+			Logging.logMessage(id, "event=start_break");
 			releaseAllLocks();
 			status = StockerStatus.WAITING;
 			nextMoveTarget = null;

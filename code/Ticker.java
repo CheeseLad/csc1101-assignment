@@ -9,11 +9,10 @@ import java.util.concurrent.locks.ReentrantLock;
 public class Ticker {
     private static final int TICKS_IN_DAY = 1000;
     
-    private static Ticker instance = null;
+    private static Ticker instance = null; // singleton instance
 
-    private int currentTick = 0; // Measures current tick in the day (resetting to 0 on new day).
-    private int currentDay = 0; // 1 day = 1000 ticks. This value increments by 1 once 1000 ticks pass.
-    private int totalTicksElapsed = 0; // Track all ticks elapsed since programme start.
+    private int currentTick = 0; // Measures elapsed ticks from programme start
+    private int currentDay = 0; // 1 day = 1000 ticks. This value increments by 1 every 1000 ticks.
     private final int tickDuration; // Amount of miliseconds in a tick, represented as an int (default recommended = 50ms).
     private final int totalRuntimeLength; // Total amount of ticks a programme runs for.
     private final ArrayList<Worker> workers;
@@ -33,17 +32,8 @@ public class Ticker {
     }
 
 
-    public static void initialise(int tickDuration, int totalRuntimeLength, ArrayList<Worker> workers, int numThreads){
-        // Ensures single instance of Ticker only (singleton)
-
-        if (instance != null) {
-            throw new IllegalStateException("Ticker already initialised!");
-        }
-
-        instance = new Ticker(tickDuration, totalRuntimeLength, workers, numThreads);
-    }
-
     // GETTERS
+
     public static Ticker getInstance(){
         if (instance == null){
             throw new IllegalStateException("Ticker not initialised!");
@@ -59,16 +49,26 @@ public class Ticker {
         return getInstance().currentDay;
     }
 
-    public static int getTickDuration(){
-        return getInstance().tickDuration;
+
+    // TICKER STATE HANDLING
+
+    public static void initialise(int tickDuration, int totalRuntimeLength, ArrayList<Worker> workers, int numThreads){
+        /* Begin the Ticker singleton instance */
+
+        // Ensures single instance of Ticker only (singleton) to avoid accidental strange behaviour.
+        if (instance != null) {
+            throw new IllegalStateException("Ticker already initialised!");
+        }
+
+        instance = new Ticker(tickDuration, totalRuntimeLength, workers, numThreads);
     }
 
-    public static int getTicksPerDay(){
-        return TICKS_IN_DAY;
-    }
-
-    // RUNNERS
     public void start(){
+        /**
+         * Starts simulation. Add all generated workers into a thread executor and stard a scheduler at selected period execution.
+         * 
+         * Every tickDuration ms, the advance() function will be called (which also calls each respective worker advance() function).
+        */
         for (Worker worker : workers){
             threadExecutor.submit(worker);
         }
@@ -76,30 +76,36 @@ public class Ticker {
     }
 
     public void stop(){
+        /**
+         * Stop scheduler. Force exits the threadExecutor's threads after all working threads perform their final action.
+         */
         scheduler.shutdown();
 
         tickLock.lock();
         try {
-            tickAdvanced.signalAll(); // Wake all working threads to ensure exit
+            tickAdvanced.signalAll(); // Wake all waiting working threads for correct exit
         } finally {
             tickLock.unlock();
         }
         threadExecutor.shutdownNow();
     }
 
-    // WORKER WAITING HANDLER
+
+    // TICKING LOGIC
+
     public int waitForNextTick(int lastTick) {
+        /* Each worker enters here per loop, and waits for next tick (to ensure that the system is fundamentally "tick-centric") */
 
         tickLock.lock();
         try {
             while (currentTick == lastTick && !scheduler.isShutdown()) {
-                tickAdvanced.await();
+                tickAdvanced.await(); // Waits until next tick
             }
             
-            return scheduler.isShutdown() ? -1 : currentTick;
+            return scheduler.isShutdown() ? -1 : currentTick; // If we are shut down, break running worker loop, hence ending thread
 
         } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+            stop();
             return -1;
         }
         finally {
@@ -107,31 +113,31 @@ public class Ticker {
         }
     }
 
-    // MAIN FUNCTION EXECUTED EVERY <tickDuration> ms
     public void advance(){
-        tickLock.lock();
+        /* Main action scheduling interface for workers. This runs every tickDuration ms, tracking ticks and advancing all workers by a tick. */
+
+        tickLock.lock(); // Ensure 2 advance() events cannot occur simultaneously
         try {
-
             currentTick++;
-            totalTicksElapsed++;
 
-            if (currentTick % 1000 == 0){
+            if (currentTick % TICKS_IN_DAY == 0){
                 currentDay++;
-                // currentTick %= TICKS_IN_DAY;
             }
 
-            tickAdvanced.signalAll();
+            tickAdvanced.signalAll(); // Wake our waiting workers
 
         } finally {
             tickLock.unlock();
         }
 
-        if (totalTicksElapsed >= totalRuntimeLength){
+        if (currentTick >= totalRuntimeLength){
             stop();
         }
     }
 
-    // STATUS CHECKERS
+
+    // STATUS CHECK
+
     public boolean isRunning(){
         return !scheduler.isShutdown();
     }

@@ -15,18 +15,30 @@ public class TrolleyPool {
 	}
 
     public synchronized Trolley tryAcquireTrolley(Worker worker) {
-        
-        int availableTrolleyCount = trolleyPool.size();
+        /**
+         * Attempt to acquire the trolley for the worker (non-blocking). 
+         * 
+         * Neither Stocker nor Picker can have all trolleys. If one trolley is left, ensure both sides have trolleys, otherwise revoke the request.
+         * 
+         * */
 
         boolean isStocker = worker instanceof Stocker;
         boolean isPicker = worker instanceof Picker;
 
-        // If last trolley available and other side has no trolleys, let them have it - prevents deadlocks
-        if (isStocker && pickersWithTrolleys == 0 && availableTrolleyCount == 1){
+        if (!isStocker && !isPicker) {
+            return null; // Not allowed to acquire trolley
+        }
+
+        int availableTrolleyCount = trolleyPool.size();
+
+        int trolleyLimit = ((availableTrolleyCount + 3) / 4) * 3;
+
+        // Ensure that neither stockers nor pickers ever have more that 3/4 of available trolleys
+        if (isStocker && stockersWithTrolleys > trolleyLimit){
             return null;
         }
 
-        if (isPicker && stockersWithTrolleys == 0 && availableTrolleyCount == 1){
+        if (isPicker && pickersWithTrolleys > trolleyLimit){
             return null;
         }
 
@@ -47,6 +59,8 @@ public class TrolleyPool {
     }
 
     public synchronized void releaseTrolley(Worker worker, Trolley trolley) {
+        /* Release the trolley and add it back into the available trolleys. */
+
         trolleyPool.add(trolley);
 
         if (worker instanceof Stocker) 

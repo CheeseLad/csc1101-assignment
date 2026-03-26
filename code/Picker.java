@@ -1,7 +1,5 @@
 import java.util.ArrayList;
 import java.util.Random;
-// import java.util.concurrent.ConcurrentHashMap;
-// import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.HashMap;
 import java.util.List;
 
@@ -88,12 +86,12 @@ public class Picker extends Worker {
             if (trolley == null) return;
 
             int waited = Ticker.getCurrentTick() - trolleyWaitStartTick;
-            Logging.logTrolleyEvent(this.id, "acquire_trolley", trolley.getId(), waited);
+            Logging.logTrolleyAcquireEvent(this.id, trolley.getId(), waited);
             trolleyWaitStartTick = -1;
 
             // Trolley acquired, start counting waiting time to pick
             pickWaitStartTick = Ticker.getCurrentTick();
-            Logging.logPickerEvent(this.id, "pick_start", newPickId, category, section.getSize(), trolley.getId());
+            Logging.logPickerStartEvent(this.id, "pick_start", newPickId, category, section.getSize(), trolley.getId());
         }
 
         if (!section.tryPickerLock()) return;
@@ -114,11 +112,11 @@ public class Picker extends Worker {
 
     public void pickDone() {
         // - 1 to log the time the picker had to wait, not how long the pick took
-        Logging.logPickerEvent(this.id, "pick_done", newPickId, category, Ticker.getCurrentTick() - pickWaitStartTick - 1, sizeAfterCurrentPick, trolley.getId());
+        Logging.logPickerDoneEvent(this.id, "pick_done", newPickId, category, Ticker.getCurrentTick() - pickWaitStartTick - 1, sizeAfterCurrentPick, trolley.getId());
 
         if (trolley != null){
             trolleyPool.releaseTrolley(this, trolley);
-            Logging.logTrolleyEvent(this.id, "release_trolley", trolley.getId());
+            Logging.logTrolleyReleaseEvent(this.id, trolley.getId());
             trolley = null;
         }
 
