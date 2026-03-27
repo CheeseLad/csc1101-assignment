@@ -26,6 +26,7 @@ public class Stocker extends Worker {
 	private String position = "staging"; // All Stockers start at Staging Area
 
 	// Break trackers
+	private int breakLength;
 	private int startBreakTick = -1;
 	private int endBreakTick = -1;
 	private boolean onBreak = false;
@@ -41,12 +42,13 @@ public class Stocker extends Worker {
 	private int currentStockTarget = 0;  // how many we intended to stock this trip
 	private int currentStocked = 0;      // how many we've already moved
 
-	public Stocker(StagingArea stagingArea, HashMap<String, Section> sections, TrolleyPool trolleyPool, int inventoryLimit, long seed) {
+	public Stocker(StagingArea stagingArea, HashMap<String, Section> sections, TrolleyPool trolleyPool, int inventoryLimit, int breakLength, long seed) {
 		this.id = "S" + nextId++;
 		this.stagingArea = stagingArea;
 		this.sections = sections;
 		this.trolleyPool = trolleyPool;
 		this.inventoryLimit = inventoryLimit;
+		this.breakLength = breakLength;
 		if (seed != 0)
 			RNG = new Random(seed);
 		else
@@ -318,7 +320,7 @@ public class Stocker extends Worker {
 		if (endBreakTick < currentTick){
 			onBreak = false;
 			startBreakTick = currentTick + 200 + RNG.nextInt(100); // Next break in 200-300 ticks
-			endBreakTick = startBreakTick + 150; // Break always lasts 150 ticks
+			endBreakTick = startBreakTick + breakLength; // Break always lasts breakLength ticks (default=150)
 			Logging.logMessage(id, "event=end_break (next break between ticks " + startBreakTick + " and " + endBreakTick + ")");
 		}
 
@@ -328,7 +330,7 @@ public class Stocker extends Worker {
 			releaseAllLocks();
 			status = StockerStatus.WAITING;
 			nextMoveTarget = null;
-			readyTick = readyTick + 150; // Pause action we are doing for 150 ticks
+			readyTick = readyTick + breakLength; // Pause action we are doing for breakLength ticks (default=150)
 			onBreak = true;
 			return;
 		}

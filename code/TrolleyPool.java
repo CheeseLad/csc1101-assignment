@@ -31,14 +31,14 @@ public class TrolleyPool {
 
         int availableTrolleyCount = trolleyPool.size();
 
-        int trolleyLimit = ((availableTrolleyCount + 3) / 4) * 3;
+        int trolleyLimit = Math.max(1, (availableTrolleyCount * 3) / 4);
 
         // Ensure that neither stockers nor pickers ever have more that 3/4 of available trolleys
-        if (isStocker && stockersWithTrolleys > trolleyLimit){
+        if (isStocker && stockersWithTrolleys >= trolleyLimit){
             return null;
         }
 
-        if (isPicker && pickersWithTrolleys > trolleyLimit){
+        if (isPicker && pickersWithTrolleys >= trolleyLimit){
             return null;
         }
 

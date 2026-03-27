@@ -34,6 +34,7 @@ public class Main {
 		final int SECTION_CAPACITY = Integer.parseInt(config.getProperty("SECTION_CAPACITY", "0"));
 		final int INITIAL_SECTION_SIZE = Integer.parseInt(config.getProperty("INITIAL_SECTION_SIZES", "5"));
 		final int STOCKER_INVENTORY_LIMIT = Integer.parseInt(config.getProperty("STOCKER_INVENTORY_LIMIT", "10"));
+		final int STOCKER_BREAK_LENGTH = Integer.parseInt(config.getProperty("STOCKER_BREAK_LENGTH", "150"));
 		
 		// TICK CONTROL
 		final int TICK_TIME_SIZE = Integer.parseInt(config.getProperty("TICK_TIME_SIZE", "50"));
@@ -83,7 +84,7 @@ public class Main {
 		}
 
 		for (int i = 0; i < STOCKERS_COUNT; i++){
-			Stocker newStocker = new Stocker(stagingArea, sections, trolleyPool, STOCKER_INVENTORY_LIMIT, SEED);
+			Stocker newStocker = new Stocker(stagingArea, sections, trolleyPool, STOCKER_INVENTORY_LIMIT, STOCKER_BREAK_LENGTH, SEED);
 			workers.add(newStocker);
 		}
 
@@ -134,31 +135,32 @@ public class Main {
 			}
 		}
 
-		System.out.println("Ending on day (starting from 0): " + Ticker.getCurrentDay());
-		System.out.println("Total ticks: " + Ticker.getCurrentTick());
-		System.out.println("Starting Stock: " + (CATEGORIES.length * INITIAL_SECTION_SIZE));
+		System.out.println("Seed=" + SEED);
+		System.out.println("Deliverers=" + DELIVERERS_COUNT + " Stockers=" + STOCKERS_COUNT + " Pickers=" + PICKERS_COUNT + " Trolleys=" + TROLLEY_POOL_SIZE);
+		System.out.println("Total ticks: " + Ticker.getCurrentTick() + " (Final Day: " + Ticker.getCurrentDay() + " (starting from 0))");
+		System.out.println("Initial Section Size: " + INITIAL_SECTION_SIZE + " (Total Starting Stock: " + (CATEGORIES.length * INITIAL_SECTION_SIZE) + ")");
 		System.out.println();
 		System.out.println("Total Deliveries: " + totalDeliveries);
 		System.out.format("Delivery Average per tick (expected ~0.01): %.3f \n", ((float)totalDeliveries / Ticker.getCurrentTick()));
 		System.out.println("Delivery Size: " + DELIVERY_SIZE);
-		System.out.println("Final Staging Area Size: " + stagingArea.getSize());
 		System.out.println();
-		System.out.println("Final Section Sizes:");
+		System.out.println("Final Section Sizes (capacity=" + SECTION_CAPACITY + "):");
 		for (String category : CATEGORIES) {
 			int size = sections.get(category).getSize();
 			totalSectionBoxes += size;
 			System.out.println(category + ": " + size);
 		}
 		System.out.println();
-		System.out.println("Total Boxes Left in Sections: " + totalSectionBoxes);
-		System.out.println("Stockers Leftover Inventories: " + leftoverInventory);
+		System.out.println("Leftover Staging Area Boxes: " + stagingArea.getSize());
+		System.out.println("Leftover Sections Boxes: " + totalSectionBoxes);
+		System.out.println("Leftover Stockers Inventory: " + leftoverInventory);
 		System.out.println("Total Picked Boxes: " + totalPickedBoxes);
 		System.out.format("Pick Average per per tick (expected ~0.1): %.3f \n", ((float)totalPickedBoxes / Ticker.getCurrentTick()));
 		System.out.println();
 		System.out.println("Total Processed (Delivered/Stocked/Picked) Boxes: " + (totalSectionBoxes + totalPickedBoxes + leftoverInventory + stagingArea.getSize()));
 		System.out.println();
-		System.out.println("Total Processed Boxes should match (Leftover Section Boxes) + (Leftover Stocker Inventory) + (Total Boxes Picked) + (Leftover Staging Area Boxes)");
-		System.out.println("Total Processed Boxes also should match (Delivery Size * Total Deliveries) + (Starting Stock). This ensures no missing boxes.");
+		System.out.println("Total Processed Boxes should match (Leftover Staging Area Boxes) + (Leftover Section Boxes) + (Leftover Stockers Inventory) + (Total Boxes Picked)");
+		System.out.println("This should reflect (Delivery Size * Total Deliveries) + (Total Starting Stock). This ensures no missing boxes.");
 		System.out.println();
 	}
 }

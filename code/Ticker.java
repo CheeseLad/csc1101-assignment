@@ -105,7 +105,7 @@ public class Ticker {
             return scheduler.isShutdown() ? -1 : currentTick; // If we are shut down, break running worker loop, hence ending thread
 
         } catch (InterruptedException e) {
-            stop();
+            Thread.currentThread().interrupt();
             return -1;
         }
         finally {
