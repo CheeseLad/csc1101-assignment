@@ -76,7 +76,7 @@ public class Deliverer extends Worker {
 		switch (status) {
 			
 			case WAITING:
-				// Peform a delivery every 100 ticks on average (for 0.01 deliveryProbability)
+				// Perform a delivery every 100 ticks on average (for 0.01 deliveryProbability)
 				if (RNG.nextFloat() <= deliveryProbability) {
 					status = DelivererStatus.DELIVERING;
 					deliverAttempt();

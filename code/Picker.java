@@ -62,15 +62,9 @@ public class Picker extends Worker {
         status = PickerStatus.PICKING;
         newPickId = nextPickId();
 
-        // REPLACE LATER
         List<Section> sectionList = new ArrayList<>(sections.values());
         section = sectionList.get(RNG.nextInt(sectionList.size()));
         category = section.getCategory();
-        // REPLACE LATER
-
-        // int currentSectionSize = section.getSize();
-
-        // this.newPickId = newPickId;
         
         pickAttempt();
 	}
