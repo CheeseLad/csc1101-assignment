@@ -1,60 +1,166 @@
-import java.util.concurrent.Executors;
-import java.util.concurrent.ExecutorService;
-import java.util.Random;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.util.Properties;
 
 public class Main {
-  public static void main(String[] args) {
+	public static void main(String[] args) {
+		
+		///// EXTRACTION OF config.properties /////
+		// Source: https://www.browserstack.com/guide/config-file-in-java
+		Properties config = new Properties();
+		try (FileInputStream input = new FileInputStream("config.properties")) {
+			config.load(input);
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
 
-    String[] categories = {"electronics", "books", "medicines", "clothes", "tools"};
+		// See config.properties for detailed explanations of below config variables.
+		
+		///// CONFIGURATIONS /////
+		
+		// WAREHOUSE ENVIRONMENT 
+		final int DELIVERERS_COUNT = Integer.parseInt(config.getProperty("DELIVERERS_COUNT", "1"));
+		final int STOCKERS_COUNT = Integer.parseInt(config.getProperty("STOCKERS_COUNT", "1"));
+		final int PICKERS_COUNT = Integer.parseInt(config.getProperty("PICKERS_COUNT", "1"));
+		final String[] CATEGORIES = config.getProperty("CATEGORIES", "electronics,books,medicines,clothes,tools").split(",");
 
-    Util util = new Util();
-    Warehouse warehouse = new Warehouse();
+		final int TOTAL_THREAD_COUNT = DELIVERERS_COUNT + STOCKERS_COUNT + PICKERS_COUNT;
 
-    ArrayList<Section> sections = new ArrayList<>();
+		// SIZE RESTRICTIONS
+		final int DELIVERY_SIZE = Integer.parseInt(config.getProperty("DELIVERY_SIZE", "10"));
+		final int TROLLEY_POOL_SIZE = Integer.parseInt(config.getProperty("TROLLEY_POOL_SIZE", "0"));
+		final int SECTION_CAPACITY = Integer.parseInt(config.getProperty("SECTION_CAPACITY", "0"));
+		final int INITIAL_SECTION_SIZE = Integer.parseInt(config.getProperty("INITIAL_SECTION_SIZES", "5"));
+		final int STOCKER_INVENTORY_LIMIT = Integer.parseInt(config.getProperty("STOCKER_INVENTORY_LIMIT", "10"));
+		final int STOCKER_BREAK_LENGTH = Integer.parseInt(config.getProperty("STOCKER_BREAK_LENGTH", "150"));
+		
+		// TICK CONTROL
+		final int TICK_TIME_SIZE = Integer.parseInt(config.getProperty("TICK_TIME_SIZE", "50"));
+		final int TOTAL_RUNTIME_TICKS = Integer.parseInt(config.getProperty("TOTAL_RUNTIME_TICKS", "1000"));
 
-    for (String category : categories) {
-      Section section = new Section(category);
-      sections.add(section);
-    }
+		// PROBABILITY CONTROL
+		final long SEED = Long.parseLong(config.getProperty("SEED", "0")); // Seed for replicable behaviour
+		final double DELIVERY_PROBABILITY = Double.parseDouble(config.getProperty("DELIVERY_PROBABILITY", "0.01"));
+		final double PICKER_PROBABILITY = Double.parseDouble(config.getProperty("PICKER_PROBABILITY", "0.1"));
+		
 
-    Delivery delivery = new Delivery(categories);
-    warehouse.addDeliveryToStagingArea(delivery.getDeliveryItems());
-    util.printEventWithBoxes("120", "DEL", "delivery_arrived", warehouse.getStagingArea(), false);
+		///// ENVIRONMENT PREPARATION /////
+		
+		// TROLLEY POOL
+		TrolleyPool trolleyPool;
 
-    // Simulate stockers moving boxes from staging area to sections
-    for (Box box : warehouse.getStagingArea()) {
-      for (Section section : sections) {
-        if (section.getSectionByCategory(box.getCategory()) != null) {
-          section.addBox(box);
-          util.printPick(130, "STK", "stocked_section", 1, section.getCategory());
-          break;
-        }
-      }
-    }
+		if (TROLLEY_POOL_SIZE < 2) {
+			int defaultTrolleyPoolSize = (int) Math.floor((STOCKERS_COUNT + PICKERS_COUNT) / 2.0);
+			trolleyPool = new TrolleyPool(defaultTrolleyPoolSize);
+		} else {
+			trolleyPool = new TrolleyPool(TROLLEY_POOL_SIZE);
+		}
 
-    Random randgen = new Random(); //  set a seed to replicate behaviour
+		// STAGING AREA
+		StagingArea stagingArea = new StagingArea(); // Assuming single staging area, but theoretically extensible
 
-    int daily_limit = randgen.nextInt(100) + 50; // Random daily limit between 50 and 150
+		// CATEGORY SECTIONS
+		HashMap<String, Section> sections = new HashMap<>(); // category -> section object
 
-    TaskManager P1 = new TaskManager("P1", daily_limit, sections, randgen);
-    TaskManager P2 = new TaskManager("P2", daily_limit, sections, randgen);
-    TaskManager P3 = new TaskManager("P3", daily_limit, sections, randgen);
-    TaskManager P4 = new TaskManager("P4", daily_limit, sections, randgen);
-    TaskManager P5 = new TaskManager("P5", daily_limit, sections, randgen);
+		for (String category : CATEGORIES) {
+			// Generate sections from available categories
+			Section section = new Section(category, SECTION_CAPACITY);
+			sections.putIfAbsent(category, section);
 
-    System.out.println("Starting threads");
+			// Per spec: You can assume each section of the warehouse begins with set amount of boxes (default: 5)
+			for (int i = 0; i < INITIAL_SECTION_SIZE; i++)
+				section.stockerTryAddBox(new Box(category)); // Pretend stockers filled them up
+		}
 
-    ExecutorService threadExecutor = Executors.newFixedThreadPool(5);
+		// WORKERS (DELIVERERS, STOCKERS, PICKERS)
+		ArrayList<Worker> workers = new ArrayList<>(); // All Deliverers, Stockers and Pickers
 
-    threadExecutor.execute(P1);
-    threadExecutor.execute(P2);
-    threadExecutor.execute(P3);
-    threadExecutor.execute(P4);
-    threadExecutor.execute(P5);
-    threadExecutor.shutdown();
+		// Generate workers, passing through config parameters as needed
+		for (int i = 0; i < DELIVERERS_COUNT; i++){
+			Deliverer newDeliverer = new Deliverer(stagingArea, CATEGORIES, DELIVERY_SIZE, DELIVERY_PROBABILITY, SEED);
+			workers.add(newDeliverer);
+		}
 
-    System.out.println( "Threads started, main ends\n" );
+		for (int i = 0; i < STOCKERS_COUNT; i++){
+			Stocker newStocker = new Stocker(stagingArea, sections, trolleyPool, STOCKER_INVENTORY_LIMIT, STOCKER_BREAK_LENGTH, SEED);
+			workers.add(newStocker);
+		}
 
-  }
+		for (int i = 0; i < PICKERS_COUNT; i++){
+			Picker newPicker = new Picker(sections, trolleyPool, PICKER_PROBABILITY, SEED);
+			workers.add(newPicker);
+		}
+
+
+		/// MAIN TICK HANDLER (TICKER) ///
+
+
+		Ticker.initialise(TICK_TIME_SIZE, TOTAL_RUNTIME_TICKS, workers, TOTAL_THREAD_COUNT);
+		
+		// START SIMULATION
+		Logging.logMessage("MAIN","start simulation");
+		Ticker.getInstance().start();
+
+		// Keep Main Thread alive while simulation runs
+		while(Ticker.getInstance().isRunning()){
+			Thread.yield(); // Yield should reduce busy waiting costs
+		}
+		
+		Logging.logMessage("MAIN","end simulation");
+
+
+		/// POST-SIMULATION SUMMARY ///
+
+		
+		System.out.println();
+		System.out.println("--- FINAL WAREHOUSE STATE ---");
+		System.out.println();
+
+		int totalDeliveries = 0;
+		int totalSectionBoxes = 0;
+		int leftoverInventory = 0;
+		int totalPickedBoxes = 0;
+
+		for (Worker worker : workers) {
+			if (worker instanceof Deliverer) {
+				totalDeliveries += ((Deliverer) worker).getTotalDeliveries();
+			}
+			else if (worker instanceof Stocker) {
+				leftoverInventory += ((Stocker) worker).getInventorySize();
+			}
+			else if (worker instanceof Picker) {
+				totalPickedBoxes += ((Picker) worker).getTotalPickedBoxes();
+			}
+		}
+
+		System.out.println("Seed=" + SEED);
+		System.out.println("Deliverers=" + DELIVERERS_COUNT + " Stockers=" + STOCKERS_COUNT + " Pickers=" + PICKERS_COUNT + " Trolleys=" + TROLLEY_POOL_SIZE);
+		System.out.println("Total ticks: " + Ticker.getCurrentTick() + " (Final Day: " + Ticker.getCurrentDay() + " (starting from 0))");
+		System.out.println("Initial Section Size: " + INITIAL_SECTION_SIZE + " (Total Starting Stock: " + (CATEGORIES.length * INITIAL_SECTION_SIZE) + ")");
+		System.out.println();
+		System.out.println("Total Deliveries: " + totalDeliveries);
+		System.out.format("Delivery Average per tick (expected ~0.01): %.3f \n", ((float)totalDeliveries / Ticker.getCurrentTick()));
+		System.out.println("Delivery Size: " + DELIVERY_SIZE);
+		System.out.println();
+		System.out.println("Final Section Sizes (capacity=" + SECTION_CAPACITY + "):");
+		for (String category : CATEGORIES) {
+			int size = sections.get(category).getSize();
+			totalSectionBoxes += size;
+			System.out.println(category + ": " + size);
+		}
+		System.out.println();
+		System.out.println("Leftover Staging Area Boxes: " + stagingArea.getSize());
+		System.out.println("Leftover Sections Boxes: " + totalSectionBoxes);
+		System.out.println("Leftover Stockers Inventory: " + leftoverInventory);
+		System.out.println("Total Picked Boxes: " + totalPickedBoxes);
+		System.out.format("Pick Average per per tick (expected ~0.1): %.3f \n", ((float)totalPickedBoxes / Ticker.getCurrentTick()));
+		System.out.println();
+		System.out.println("Total Processed (Delivered/Stocked/Picked) Boxes: " + (totalSectionBoxes + totalPickedBoxes + leftoverInventory + stagingArea.getSize()));
+		System.out.println();
+		System.out.println("Total Processed Boxes should match (Leftover Staging Area Boxes) + (Leftover Section Boxes) + (Leftover Stockers Inventory) + (Total Boxes Picked)");
+		System.out.println("This should reflect (Delivery Size * Total Deliveries) + (Total Starting Stock). This ensures no missing boxes.");
+		System.out.println();
+	}
 }

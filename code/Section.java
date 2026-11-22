@@ -1,50 +1,65 @@
-import java.util.ArrayList;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class Section {
-  
-  private ArrayList<Box> boxes;
-  private String sectionCategory;
 
-  public Section(String sectionCategory) {
-    this.sectionCategory = sectionCategory;
-    this.boxes = new ArrayList<>();
-  }
+    private String category;
+    public int maxCapacity;
+	private ConcurrentLinkedQueue<Box> boxes = new ConcurrentLinkedQueue<>();
+    private final ReentrantReadWriteLock sectionLock = new ReentrantReadWriteLock(true);
 
-  public void addBox(Box box) {
-    synchronized (this) {
-      if (box.getCategory().equals(sectionCategory)) {
-        boxes.add(box);
-      } else {
-        System.out.println("[ERROR] Box category does not match section category.");
-      }
-    }
-  }
+	public Section(String category, int capacity) {
+		this.category = category;
+		this.maxCapacity = capacity;
+	}
 
-  public  Box removeBox() {
-    long startWait = System.nanoTime();
+	public int getSize() {
+		return boxes.size();
+	}
 
-    synchronized (this) {
+	public String getCategory() {
+		return category;
+	}
 
-        long waitedMs = (System.nanoTime() - startWait) / 1_000_000;
-        System.out.println("Waited for lock: " + waitedMs + " ms");
+	public boolean isEmpty() {
+        return boxes.isEmpty();
+	}
 
-      if (!boxes.isEmpty()) {
-        return boxes.remove(0);
-      } 
+    public boolean isFull() {
+		return boxes.size() == maxCapacity;
 
-      return null;
-    }
-  }
-
-  public String getCategory() {
-    return sectionCategory;
-  }
-
-  public Section getSectionByCategory(String category) {
-    if (category.equals(sectionCategory)) {
-      return this;
     }
 
-    return null;
-  }
+    public synchronized boolean tryStockerLock() {
+        return sectionLock.writeLock().tryLock();
+    }
+
+    public void releaseStockerLock() {
+        sectionLock.writeLock().unlock();
+    }
+
+    public boolean stockerTryAddBox(Box box) {
+        if (boxes.size() >= maxCapacity) return false;
+
+        if (box.getCategory().equals(category)) {
+            return boxes.add(box);
+        }
+        return false;
+    }
+
+    public boolean tryPickerLock() {
+        return sectionLock.readLock().tryLock();
+    }
+
+    public void releasePickerLock() {
+        sectionLock.readLock().unlock();
+    }
+
+    public int pickerRemoveBox() {
+        if (boxes.isEmpty()) return -1;
+
+        Box box = boxes.poll();
+        if (box == null) return -1;
+        return boxes.size();
+    }
 }

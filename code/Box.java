@@ -1,12 +1,12 @@
 public class Box {
   
-  private String category;
+	private String category;
 
-  public Box(String category) {
-    this.category = category;
-  }
+	public Box(String category) {
+		this.category = category;
+	}
 
-  public String getCategory() {
-    return category;
-  }
+	public String getCategory() {
+		return category;
+	}
 }
